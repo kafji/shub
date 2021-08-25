@@ -25,4 +25,7 @@ shub repos download-settings kafji/shub ./gh-repo-settings.toml
 
 # apply repository settings to GitHub repository
 shub repos apply-settings ./gh-repo-settings.toml kafji/shub
+
+# list starred repositories
+shub stars
 ```

@@ -21,3 +21,13 @@ pub struct Repository {
     pub delete_branch_on_merge: bool,
     pub allow_merge_commit: bool,
 }
+
+#[derive(Deserialize, PartialEq, Debug)]
+pub struct StarredRepository {
+    pub id: i32,
+    pub name: String,
+    pub full_name: String,
+    pub html_url: String,
+    pub description: Option<String>,
+    pub language: Option<String>,
+}
