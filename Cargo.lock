@@ -1144,7 +1144,6 @@ dependencies = [
  "http",
  "indoc",
  "lembaran",
- "pin-project",
  "reqwest",
  "serde",
  "serde_json",
