@@ -1,12 +1,14 @@
+use crate::cli::LangFilter;
 use anyhow::Result;
 use futures::{future, stream::TryStreamExt};
 use serde::{Deserialize, Serialize};
 use shub::{
     client::GhClient,
     requests::UpdateRepository,
-    responses::{Repository, WorkflowRun},
+    responses::{Repository, StarredRepository, WorkflowRun},
 };
-use std::path::Path;
+use std::{fmt, io::Write, path::Path};
+use tabwriter::TabWriter;
 use tokio::fs;
 use tracing::debug;
 
@@ -25,10 +27,7 @@ impl App<'_> {
             .actions()
             .list_workflow_runs(owner, repo)
             .and_then(move |WorkflowRun { id, .. }| async move {
-                self.client
-                    .actions()
-                    .delete_workflow_run(owner, repo, id)
-                    .await?;
+                self.client.actions().delete_workflow_run(owner, repo, id).await?;
                 Ok(())
             })
             .try_fold(0, |acc, _| future::ok(acc + 1))
@@ -45,16 +44,9 @@ impl App<'_> {
     ) -> Result<()> {
         let owner = owner.unwrap_or(self.username);
         let path = file;
-        println!(
-            "Downloading GitHub repository settings for {}/{} to {:?}.",
-            owner, repo, path
-        );
-        let settings: RepositorySettings = self
-            .client
-            .repos()
-            .get_repository(owner, repo)
-            .await?
-            .into();
+        println!("Downloading GitHub repository settings for {}/{} to {:?}.", owner, repo, path);
+        let settings: RepositorySettings =
+            self.client.repos().get_repository(owner, repo).await?.into();
         let buf = toml::to_vec(&settings)?;
         debug!(?settings, ?path, "writing settings");
         fs::write(path, &buf).await?;
@@ -64,18 +56,42 @@ impl App<'_> {
     pub async fn apply_settings(&self, owner: Option<&str>, repo: &str, file: &Path) -> Result<()> {
         let owner = owner.unwrap_or(self.username);
         let path = file;
-        println!(
-            "Applying GitHub repository settings from {:?} for {}/{}.",
-            path, owner, repo,
-        );
+        println!("Applying GitHub repository settings from {:?} for {}/{}.", path, owner, repo,);
         let settings = fs::read(path).await?;
         let settings: RepositorySettings = toml::from_slice(&settings)?;
         debug!(?settings, "applying settings");
         let settings = settings.into();
-        self.client
-            .repos()
-            .update_repository(owner, repo, &settings)
+        self.client.repos().update_repository(owner, repo, &settings).await?;
+        Ok(())
+    }
+
+    pub async fn list_starred(&self, lang_filter: Option<&LangFilter>) -> Result<()> {
+        let out = std::io::stdout();
+        let mut out = TabWriter::new(out);
+
+        let starred = self
+            .client
+            .activity()
+            .get_starred()
+            .try_filter(|repo| {
+                let pass = lang_filter
+                    .and_then(|filter| {
+                        let LangFilter { negation, lang } = filter;
+                        repo.language
+                            .as_ref()
+                            .map(|x| x.to_ascii_lowercase() == lang.to_ascii_lowercase())
+                            .or_else(|| false.into())
+                            .map(|x| if *negation { !x } else { x })
+                    })
+                    .unwrap_or(true);
+                future::ready(pass)
+            })
+            .try_collect::<Vec<_>>()
             .await?;
+        let starred = StarredRepositories(starred);
+        write!(&mut out, "{}", starred)?;
+        out.flush()?;
+
         Ok(())
     }
 }
@@ -131,5 +147,35 @@ impl Into<UpdateRepository> for RepositorySettings {
             allow_auto_merge,
             delete_branch_on_merge,
         }
+    }
+}
+
+#[derive(Debug)]
+struct StarredRepositories(Vec<StarredRepository>);
+
+impl fmt::Display for StarredRepositories {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for x in &self.0 {
+            // print name
+            let name = &x.name;
+            write!(f, "{}", name)?;
+            write!(f, "\t",)?;
+
+            // print description
+            let desc = x.description.as_ref().map(String::as_str).unwrap_or("-");
+            write!(f, "{}", desc)?;
+            write!(f, "\t",)?;
+
+            // print language
+            let lang = x.language.as_ref().map(String::as_str).unwrap_or("-");
+            write!(f, "{}", lang)?;
+            write!(f, "\t",)?;
+
+            // print url
+            let url = &x.html_url;
+            write!(f, "{}", url)?;
+            write!(f, "\n")?;
+        }
+        Ok(())
     }
 }

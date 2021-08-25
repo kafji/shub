@@ -25,18 +25,13 @@ async fn download_settings(
     DownloadSettings { repository, file }: DownloadSettings,
 ) -> Result<()> {
     let Repository { owner, name } = repository;
-    app.download_settings(owner.as_ref().map(String::as_str), &name, file.as_path())
-        .await?;
+    app.download_settings(owner.as_ref().map(String::as_str), &name, file.as_path()).await?;
     Ok(())
 }
 
 async fn apply_settings<'a>(
     app: App<'a>,
-    ApplySettings {
-        file,
-        repository,
-        repositories,
-    }: ApplySettings,
+    ApplySettings { file, repository, repositories }: ApplySettings,
 ) -> Result<()> {
     let app = Arc::new(app);
     let file = file.as_path();
@@ -63,9 +58,7 @@ async fn apply_settings<'a>(
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
     let cmd = cli::cmd();
     debug!(?cmd, "launched");
 
@@ -74,10 +67,7 @@ async fn main() -> Result<()> {
     let token = env::var("SHUB_TOKEN")?;
     let token = PersonalAccessToken::new(&username, &token);
     let client = GhClient::new(None, &token)?;
-    let app = App {
-        username: &username,
-        client,
-    };
+    let app = App { username: &username, client };
 
     // process command
     use Subcommand::*;
@@ -95,6 +85,7 @@ async fn main() -> Result<()> {
                 ApplySettings(cmd) => apply_settings(app, cmd).await?,
             }
         }
+        Stars(x) => app.list_starred(x.lang.as_ref()).await?,
     };
 
     debug!("exiting");

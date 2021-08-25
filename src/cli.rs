@@ -1,7 +1,7 @@
 use argh::FromArgs;
 use std::{convert::Infallible, str::FromStr};
 
-pub use self::{actions::*, repos::*};
+pub use self::{actions::*, repos::*, stars::*};
 
 #[derive(FromArgs, PartialEq, Debug)]
 /// Yet another GitHub CLI.
@@ -15,6 +15,7 @@ pub struct Cli {
 pub enum Subcommand {
     Actions(Actions),
     Repos(Repos),
+    Stars(Stars),
 }
 
 mod actions {
@@ -94,6 +95,49 @@ mod repos {
     }
 }
 
+mod stars {
+    use super::*;
+
+    #[derive(FromArgs, PartialEq, Debug)]
+    #[argh(subcommand, name = "stars")]
+    /// List starred repositories.
+    pub struct Stars {
+        #[argh(option)]
+        /// filter by language. Prefix with `!` to make a negation, i.e. `!rust` to filter out Rust.
+        pub lang: Option<LangFilter>,
+    }
+
+    #[derive(PartialEq, Debug)]
+    pub struct LangFilter {
+        pub negation: bool,
+        pub lang: String,
+    }
+
+    impl FromStr for LangFilter {
+        type Err = Infallible;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let f = if s.starts_with('!') {
+                LangFilter { negation: true, lang: s[1..].to_owned() }
+            } else {
+                LangFilter { negation: false, lang: s.to_owned() }
+            };
+            Ok(f)
+        }
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn test_parse_lang_filter() {
+        // trivial
+        assert_eq!(LangFilter { negation: false, lang: "rust".into() }, "rust".parse().unwrap());
+        // trivial negation
+        assert_eq!(LangFilter { negation: true, lang: "rust".into() }, "!rust".parse().unwrap());
+        // symbols
+        assert_eq!(LangFilter { negation: true, lang: "@#$%".into() }, "!@#$%".parse().unwrap());
+    }
+}
+
 pub fn cmd() -> Cli {
     argh::from_env()
 }
@@ -115,10 +159,7 @@ impl FromStr for Repository {
                 let name = s[x + 1..].to_owned();
                 Repository { owner, name }
             }
-            None => Repository {
-                owner: None,
-                name: s.into(),
-            },
+            None => Repository { owner: None, name: s.into() },
         };
         Ok(r)
     }
@@ -129,26 +170,14 @@ impl FromStr for Repository {
 fn test_parse_repository() {
     // trivial case
     assert_eq!(
-        Repository {
-            owner: "kafji".to_owned().into(),
-            name: "shub".to_owned()
-        },
+        Repository { owner: "kafji".to_owned().into(), name: "shub".to_owned() },
         "kafji/shub".parse().unwrap()
     );
     // missing owner
-    assert_eq!(
-        Repository {
-            owner: None,
-            name: "shub".to_owned()
-        },
-        "shub".parse().unwrap()
-    );
+    assert_eq!(Repository { owner: None, name: "shub".to_owned() }, "shub".parse().unwrap());
     // double separator
     assert_eq!(
-        Repository {
-            owner: "kafji".to_owned().into(),
-            name: "sh/ub".to_owned()
-        },
+        Repository { owner: "kafji".to_owned().into(), name: "sh/ub".to_owned() },
         "kafji/sh/ub".parse().unwrap()
     );
 }

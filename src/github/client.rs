@@ -1,4 +1,4 @@
-use self::{actions::*, repos::*};
+use self::{actions::*, activity::*, repos::*};
 use super::{
     error::Error,
     requests::UpdateRepository,
@@ -40,10 +40,8 @@ impl GhClient {
         base_url: impl Into<Option<Url>>,
         token: &impl Authentication,
     ) -> ClientResult<Self> {
-        let base_url: Url = base_url
-            .into()
-            .map(Result::Ok)
-            .unwrap_or_else(|| "https://api.github.com/".parse())?;
+        let base_url: Url =
+            base_url.into().map(Result::Ok).unwrap_or_else(|| "https://api.github.com/".parse())?;
 
         let headers = {
             let mut headers = HeaderMap::new();
@@ -73,6 +71,10 @@ impl GhClient {
 
     pub fn actions(&self) -> GhActions<'_> {
         GhActions { client: self }
+    }
+
+    pub fn activity(&self) -> GhActivity<'_> {
+        GhActivity { client: self }
     }
 
     pub fn repos(&self) -> GhRepos<'_> {
@@ -159,6 +161,52 @@ mod actions {
             debug!(?response, "received response");
             response.error_for_status()?;
             Ok(())
+        }
+    }
+}
+
+mod activity {
+    use crate::responses::StarredRepository;
+
+    use super::*;
+
+    #[derive(Debug)]
+    pub struct GhActivity<'c> {
+        pub client: &'c GhClient,
+    }
+
+    impl GhActivity<'_> {
+        pub fn get_starred(&self) -> impl TryStream<Ok = StarredRepository, Error = Error> + '_ {
+            pagination::with_factory(move |url: Option<Url>| async move {
+                let url = match url {
+                    Some(x) => x,
+                    None => self.client.build_url("/user/starred"),
+                };
+                let request = self.client.http.get(url).query(&[("per_page", "100")]);
+                debug!(?request, "sending request");
+                let response = request.send().await?;
+                debug!(?response, "received response");
+                let response = response.error_for_status()?;
+                let next_page_url = web_linking::http::from_headers(response.headers())
+                    .find(|Link { params, .. }| {
+                        params
+                            .iter()
+                            .find(|Param { name, value }| {
+                                *name == "rel" && value.as_deref() == Some("next".into())
+                            })
+                            .is_some()
+                    })
+                    .map(|Link { uri, .. }| uri)
+                    .map(|x| String::from_utf8_lossy(&**x).parse::<Url>())
+                    .transpose()?;
+                let response_body: Vec<_> = response.json().await?;
+                debug!(?response_body, "response body");
+                Ok((response_body, next_page_url))
+            })
+            .flat_map(|x: ClientResult<Vec<_>>| match x {
+                Ok(x) => stream::iter(x).map(|x| Ok(x)).boxed(),
+                Err(x) => stream::once(future::ready(Err(x))).boxed(),
+            })
         }
     }
 }
@@ -254,15 +302,9 @@ mod repos {
             let addr = rx_ready.await.unwrap();
             let base_url: Url = format!("http://{}/", addr).parse().unwrap();
             let client = GhClient::new(base_url, &TEST_TOKEN).unwrap();
-            let fields = UpdateRepository {
-                allow_merge_commit: false.into(),
-                ..Default::default()
-            };
-            client
-                .repos()
-                .update_repository("kafji", "shub", &fields)
-                .await
-                .unwrap();
+            let fields =
+                UpdateRepository { allow_merge_commit: false.into(), ..Default::default() };
+            client.repos().update_repository("kafji", "shub", &fields).await.unwrap();
 
             server.abort();
             server.await.ok();
