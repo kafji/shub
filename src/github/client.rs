@@ -86,6 +86,11 @@ mod actions {
     use super::*;
 
     #[derive(Debug)]
+    /// GitHub's action resource.
+    ///
+    /// [GitHub Docs].
+    ///
+    /// [GitHub Docs]: https://docs.github.com/en/rest/reference/actions
     pub struct GhActions<'c> {
         pub client: &'c GhClient,
     }
@@ -166,16 +171,25 @@ mod actions {
 }
 
 mod activity {
+    use super::*;
     use crate::responses::StarredRepository;
 
-    use super::*;
-
     #[derive(Debug)]
+    /// GitHub's activity resource.
+    ///
+    /// [GitHub Docs].
+    ///
+    /// [GitHub Docs]: https://docs.github.com/en/rest/reference/activity
     pub struct GhActivity<'c> {
         pub client: &'c GhClient,
     }
 
     impl GhActivity<'_> {
+        /// List repositories starred by the authenticated user.
+        ///
+        /// [GitHub Docs].
+        ///
+        /// [GitHub Docs]: https://docs.github.com/en/rest/reference/activity#list-repositories-starred-by-the-authenticated-user
         pub fn get_starred(&self) -> impl TryStream<Ok = StarredRepository, Error = Error> + '_ {
             pagination::with_factory(move |url: Option<Url>| async move {
                 let url = match url {
@@ -215,6 +229,11 @@ mod repos {
     use super::*;
 
     #[derive(Debug)]
+    /// GitHub's repository resource.
+    ///
+    /// [GitHub Docs].
+    ///
+    /// [GitHub Docs]: https://docs.github.com/en/rest/reference/repos
     pub struct GhRepos<'c> {
         pub client: &'c GhClient,
     }

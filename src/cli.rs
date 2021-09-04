@@ -105,6 +105,10 @@ mod stars {
         #[argh(option)]
         /// filter by language. Prefix with `!` to make a negation, i.e. `!rust` to filter out Rust.
         pub lang: Option<LangFilter>,
+
+        #[argh(switch)]
+        /// truncate long texts
+        pub short: bool,
     }
 
     #[derive(PartialEq, Debug)]
