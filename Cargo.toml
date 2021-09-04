@@ -7,8 +7,7 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-# track(kfj): upstream: https://github.com/google/argh/pull/104
-argh = { git = "https://github.com/kafji/argh", branch = "kfj/positionalname" }
+argh = "0.1"
 async-trait = "0.1"
 base64 = "0.13"
 dotenv = "0.15"
