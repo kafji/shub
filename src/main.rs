@@ -1,3 +1,5 @@
+#![deny(rust_2018_idioms)]
+
 use crate::{app::App, cli::*};
 use anyhow::Result;
 use futures::{future, TryStreamExt};
@@ -85,7 +87,7 @@ async fn main() -> Result<()> {
                 ApplySettings(cmd) => apply_settings(app, cmd).await?,
             }
         }
-        Stars(x) => app.list_starred(x.lang.as_ref()).await?,
+        Stars(cmd) => app.list_starred(cmd.lang.as_ref(), cmd.short).await?,
     };
 
     debug!("exiting");

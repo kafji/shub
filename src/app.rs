@@ -7,7 +7,7 @@ use shub::{
     requests::UpdateRepository,
     responses::{Repository, StarredRepository, WorkflowRun},
 };
-use std::{fmt, io::Write, path::Path};
+use std::{borrow::Cow, fmt, io::Write, path::Path};
 use tabwriter::TabWriter;
 use tokio::fs;
 use tracing::debug;
@@ -65,9 +65,11 @@ impl App<'_> {
         Ok(())
     }
 
-    pub async fn list_starred(&self, lang_filter: Option<&LangFilter>) -> Result<()> {
-        let out = std::io::stdout();
-        let mut out = TabWriter::new(out);
+    pub async fn list_starred(&self, lang_filter: Option<&LangFilter>, short: bool) -> Result<()> {
+        let mut out = {
+            let t = std::io::stdout();
+            TabWriter::new(t)
+        };
 
         let starred = self
             .client
@@ -75,8 +77,7 @@ impl App<'_> {
             .get_starred()
             .try_filter(|repo| {
                 let pass = lang_filter
-                    .and_then(|filter| {
-                        let LangFilter { negation, lang } = filter;
+                    .and_then(|LangFilter { negation, lang }| {
                         repo.language
                             .as_ref()
                             .map(|x| x.to_ascii_lowercase() == lang.to_ascii_lowercase())
@@ -88,12 +89,101 @@ impl App<'_> {
             })
             .try_collect::<Vec<_>>()
             .await?;
-        let starred = StarredRepositories(starred);
+
+        let starred = Formatted::new(short, starred);
         write!(&mut out, "{}", starred)?;
         out.flush()?;
 
         Ok(())
     }
+}
+
+#[derive(Debug)]
+struct Formatted {
+    short: bool,
+    repos: Vec<StarredRepository>,
+}
+
+impl Formatted {
+    fn new(short: bool, repos: Vec<StarredRepository>) -> Self {
+        Self { short, repos }
+    }
+}
+
+impl fmt::Display for Formatted {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ellipsize: fn(_, _) -> _ = if self.short {
+            ellipsize
+        } else {
+            // noop
+            (|x, _| Cow::Borrowed(x)) as _
+        };
+
+        for repo in &self.repos {
+            // print name
+            let name = &repo.full_name;
+            let name = ellipsize(name, 40);
+            write!(f, "{}", name)?;
+
+            // print description
+            write!(f, "\t",)?;
+            let desc = repo.description.as_ref().map(String::as_str).unwrap_or("");
+            let desc = ellipsize(desc, 80);
+            write!(f, "{}", desc)?;
+
+            // print language
+            write!(f, "\t",)?;
+            let lang = repo.language.as_ref().map(String::as_str).unwrap_or("");
+            let lang = ellipsize(lang, 20);
+            write!(f, "{}", lang)?;
+
+            write!(f, "\n")?;
+        }
+
+        Ok(())
+    }
+}
+
+fn ellipsize(text: &str, threshold: usize) -> Cow<'_, str> {
+    // todo(kfj): convert to type error?
+    debug_assert!(threshold > 3);
+
+    if text.len() <= threshold {
+        text.into()
+    } else {
+        let text = text.chars().take(threshold - 3);
+        let ellipsis = (0..3).map(|_| '.');
+        let s: String = text.chain(ellipsis).collect();
+        s.into()
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn test_ellipsize() {
+    use quickcheck::{quickcheck, TestResult};
+
+    fn has_max_length_threshold(text: String, threshold: usize) -> TestResult {
+        if threshold < 4 {
+            return TestResult::discard();
+        }
+        TestResult::from_bool(ellipsize(&text, threshold).chars().count() <= threshold)
+    }
+
+    quickcheck(has_max_length_threshold as fn(_, _) -> TestResult);
+
+    fn has_ellipsis_at_the_end(text: String, threshold: usize) -> TestResult {
+        if threshold < 4 {
+            return TestResult::discard();
+        }
+        if text.chars().count() <= threshold {
+            return TestResult::discard();
+        }
+        let ellipsized = ellipsize(&text, threshold);
+        TestResult::from_bool(ellipsized.ends_with("..."))
+    }
+
+    quickcheck(has_ellipsis_at_the_end as fn(_, _) -> TestResult);
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -147,35 +237,5 @@ impl Into<UpdateRepository> for RepositorySettings {
             allow_auto_merge,
             delete_branch_on_merge,
         }
-    }
-}
-
-#[derive(Debug)]
-struct StarredRepositories(Vec<StarredRepository>);
-
-impl fmt::Display for StarredRepositories {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for x in &self.0 {
-            // print name
-            let name = &x.name;
-            write!(f, "{}", name)?;
-            write!(f, "\t",)?;
-
-            // print description
-            let desc = x.description.as_ref().map(String::as_str).unwrap_or("-");
-            write!(f, "{}", desc)?;
-            write!(f, "\t",)?;
-
-            // print language
-            let lang = x.language.as_ref().map(String::as_str).unwrap_or("-");
-            write!(f, "{}", lang)?;
-            write!(f, "\t",)?;
-
-            // print url
-            let url = &x.html_url;
-            write!(f, "{}", url)?;
-            write!(f, "\n")?;
-        }
-        Ok(())
     }
 }

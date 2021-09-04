@@ -1,6 +1,6 @@
 # Shub
 
-Yet another, written in Rust, GitHub CLI.
+GitHub CLI.
 
 ## Installation
 
@@ -27,5 +27,5 @@ shub repos download-settings kafji/shub ./gh-repo-settings.toml
 shub repos apply-settings ./gh-repo-settings.toml kafji/shub
 
 # list starred repositories
-shub stars
+shub stars --short
 ```

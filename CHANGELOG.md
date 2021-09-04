@@ -2,6 +2,16 @@
 
 ## [Unreleased](https://github.com/kafji/shub/tree/master)
 
+Breaking changes:
+
+- Remove URL column
+
+- Print repository full name in first column instead of name with its organization name omitted
+
+Changes:
+
+- Add `short` switch for `stars` command to truncate long texts
+
 ## [0.1.1](https://github.com/kafji/shub/tree/v0.1.1) - 2021-08-25
 
 - Add new commad to print starred repositories.
