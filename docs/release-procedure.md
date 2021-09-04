@@ -5,7 +5,7 @@
     1. Fetch latest changes in `origin/master`.
 
         ```
-        git fetch origin/master
+        git fetch origin master
         ```
 
     2. Checkout to `master`.
