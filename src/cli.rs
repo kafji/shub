@@ -59,9 +59,15 @@ mod repos {
     #[derive(FromArgs, PartialEq, Debug)]
     #[argh(subcommand)]
     pub enum ReposSubcommand {
+        List(List),
         DownloadSettings(DownloadSettings),
         ApplySettings(ApplySettings),
     }
+
+    #[derive(FromArgs, PartialEq, Debug)]
+    #[argh(subcommand, name = "list")]
+    /// Print all owned repositories.
+    pub struct List {}
 
     #[derive(FromArgs, PartialEq, Debug)]
     #[argh(subcommand, name = "download-settings")]

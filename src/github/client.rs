@@ -6,7 +6,7 @@ use super::{
 };
 use futures::{future, stream, StreamExt, TryStream};
 use http::{
-    header::{AUTHORIZATION, USER_AGENT},
+    header::{ACCEPT, AUTHORIZATION, USER_AGENT},
     HeaderMap, HeaderValue,
 };
 use lembaran::{
@@ -15,7 +15,7 @@ use lembaran::{
 };
 use reqwest::{Client, ClientBuilder};
 use std::{convert::TryInto, result::Result};
-use tracing::{debug, info};
+use tracing::debug;
 use url::Url;
 
 type ClientResult<T> = Result<T, Error>;
@@ -51,6 +51,8 @@ impl GhClient {
 
             let authorization = token.to_authz_value();
             headers.insert(AUTHORIZATION, authorization.try_into()?);
+
+            headers.insert(ACCEPT, "application/vnd.github.v3+json".try_into()?);
 
             headers
         };
@@ -172,7 +174,7 @@ mod actions {
 
 mod activity {
     use super::*;
-    use crate::responses::StarredRepository;
+    use crate::github::responses::StarredRepository;
 
     #[derive(Debug)]
     /// GitHub's activity resource.
@@ -226,6 +228,8 @@ mod activity {
 }
 
 mod repos {
+    use crate::github::{requests::RepositoryType, responses::MyRepository};
+
     use super::*;
 
     #[derive(Debug)]
@@ -239,6 +243,37 @@ mod repos {
     }
 
     impl GhRepos<'_> {
+        /// List organization repositories.
+        ///
+        /// [GitHub Docs].
+        ///
+        /// [GitHub Docs]: https://docs.github.com/en/rest/reference/repos#list-organization-repositories
+        pub fn list_organization_repositories<'a>(
+            &'a self,
+            organization: &'a str,
+        ) -> impl TryStream<Ok = Repository, Error = Error> + 'a {
+            pagination::with_factory(move |url: Option<Url>| async move {
+                let url = url.unwrap_or_else(|| {
+                    let path = format!("/orgs/{org}/repos", org = organization);
+                    self.client.build_url(&path)
+                });
+
+                let request = self.client.http.get(url).query(&[("per_page", "100")]);
+                debug!(?request, "sending request");
+
+                let res = request.send().await?;
+                let res = res.error_for_status()?;
+
+                let next_page_url = res.get_next_page_url()?;
+                let res_body: Vec<Repository> = res.json().await?;
+                Ok((res_body, next_page_url))
+            })
+            .flat_map(|x: ClientResult<Vec<_>>| match x {
+                Ok(x) => stream::iter(x).map(|x| Ok(x)).boxed(),
+                Err(x) => stream::once(future::ready(Err(x))).boxed(),
+            })
+        }
+
         /// Get a repository.
         ///
         /// [GitHub Docs].
@@ -251,9 +286,9 @@ mod repos {
                 repo = repo
             ));
             let request = self.client.http.get(url);
-            info!(?request, "sending request");
+            debug!(?request, "sending request");
             let response = request.send().await?;
-            info!(?response, "received response");
+            debug!(?response, "received response");
             let response = response.error_for_status()?;
             let response_body: Repository = response.json().await?;
             debug!(?response_body, "response body");
@@ -277,18 +312,59 @@ mod repos {
                 repo = repo
             ));
             let request = self.client.http.patch(url).json(&fields);
-            info!(?request, "sending request");
+            debug!(?request, "sending request");
             let response = request.send().await?;
-            info!(?response, "received response");
+            debug!(?response, "received response");
             response.error_for_status()?;
             Ok(())
+        }
+
+        /// List repositories for the authenticated user.
+        ///
+        /// [GitHub Docs].
+        ///
+        /// [GitHub Docs]: https://docs.github.com/en/rest/reference/repos#list-repositories-for-the-authenticated-user
+        pub fn list_my_repositories(
+            &self,
+            r#type: Option<RepositoryType>,
+        ) -> impl TryStream<Ok = MyRepository, Error = Error> + '_ {
+            pagination::with_factory(move |url: Option<Url>| async move {
+                let url = url.unwrap_or_else(|| self.client.build_url("/user/repos"));
+
+                let queries = {
+                    let mut v = Vec::new();
+                    match r#type {
+                        Some(r#type) => {
+                            v.push(("type", r#type.to_str()));
+                        }
+                        None => {}
+                    };
+                    v.push(("per_page", "100"));
+                    v.shrink_to_fit();
+                    v
+                };
+                let request = self.client.http.get(url).query(&queries);
+                debug!(?request, "sending request");
+
+                let response = request.send().await?;
+                let response = response.error_for_status()?;
+                debug!(?response, "received response");
+
+                let next_page_url = response.get_next_page_url()?;
+                let res_body: Vec<_> = response.json().await?;
+                Ok((res_body, next_page_url))
+            })
+            .flat_map(|x: ClientResult<Vec<_>>| match x {
+                Ok(x) => stream::iter(x).map(|x| Ok(x)).boxed(),
+                Err(x) => stream::once(future::ready(Err(x))).boxed(),
+            })
         }
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::PersonalAccessToken;
+        use crate::github::PersonalAccessToken;
         use warp::Filter;
 
         const TEST_TOKEN: PersonalAccessToken<'static> = PersonalAccessToken::new("kafji", "t0k3n");
@@ -328,5 +404,31 @@ mod repos {
             server.abort();
             server.await.ok();
         }
+    }
+}
+
+trait NextPage {
+    type Error;
+
+    fn get_next_page_url(&self) -> Result<Option<Url>, Self::Error>;
+}
+
+impl NextPage for reqwest::Response {
+    type Error = url::ParseError;
+
+    fn get_next_page_url(&self) -> Result<Option<Url>, Self::Error> {
+        let headers = self.headers();
+        let mut links = web_linking::http::from_headers(headers);
+        links
+            .find(|Link { params, .. }| {
+                params
+                    .iter()
+                    .find(|Param { name, value }| {
+                        *name == "rel" && value.as_deref() == Some("next".into())
+                    })
+                    .is_some()
+            })
+            .map(|Link { uri, .. }| String::from_utf8_lossy(uri).parse::<Url>())
+            .transpose()
     }
 }

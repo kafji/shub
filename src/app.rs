@@ -2,10 +2,10 @@ use crate::cli::LangFilter;
 use anyhow::Result;
 use futures::{future, stream::TryStreamExt};
 use serde::{Deserialize, Serialize};
-use shub::{
+use shub::github::{
     client::GhClient,
-    requests::UpdateRepository,
-    responses::{Repository, StarredRepository, WorkflowRun},
+    requests::{RepositoryType, UpdateRepository},
+    responses::{MyRepository, Repository, StarredRepository, WorkflowRun},
 };
 use std::{borrow::Cow, fmt, io::Write, path::Path};
 use tabwriter::TabWriter;
@@ -67,8 +67,8 @@ impl App<'_> {
 
     pub async fn list_starred(&self, lang_filter: Option<&LangFilter>, short: bool) -> Result<()> {
         let mut out = {
-            let t = std::io::stdout();
-            TabWriter::new(t)
+            let w = std::io::stdout();
+            TabWriter::new(w)
         };
 
         let starred = self
@@ -90,8 +90,25 @@ impl App<'_> {
             .try_collect::<Vec<_>>()
             .await?;
 
-        let starred = Formatted::new(short, starred);
+        let starred = Tabulator { repos: starred, short };
         write!(&mut out, "{}", starred)?;
+        out.flush()?;
+
+        Ok(())
+    }
+
+    pub async fn list_repos(&self) -> Result<()> {
+        let mut out = {
+            let w = std::io::stdout();
+            TabWriter::new(w)
+        };
+
+        let client = self.client.repos();
+        let repos = client.list_my_repositories(RepositoryType::Owner.into());
+        let repos: Vec<_> = repos.try_collect().await?;
+
+        let tabulator = Tabulator { repos, short: false };
+        write!(&mut out, "{}", tabulator)?;
         out.flush()?;
 
         Ok(())
@@ -99,18 +116,12 @@ impl App<'_> {
 }
 
 #[derive(Debug)]
-struct Formatted {
+struct Tabulator<R> {
+    repos: Vec<R>,
     short: bool,
-    repos: Vec<StarredRepository>,
 }
 
-impl Formatted {
-    fn new(short: bool, repos: Vec<StarredRepository>) -> Self {
-        Self { short, repos }
-    }
-}
-
-impl fmt::Display for Formatted {
+impl fmt::Display for Tabulator<StarredRepository> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ellipsize: fn(_, _) -> _ = if self.short {
             ellipsize
@@ -130,6 +141,57 @@ impl fmt::Display for Formatted {
             let desc = repo.description.as_ref().map(String::as_str).unwrap_or("");
             let desc = ellipsize(desc, 80);
             write!(f, "{}", desc)?;
+
+            // print language
+            write!(f, "\t",)?;
+            let lang = repo.language.as_ref().map(String::as_str).unwrap_or("");
+            let lang = ellipsize(lang, 20);
+            write!(f, "{}", lang)?;
+
+            write!(f, "\n")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl fmt::Display for Tabulator<MyRepository> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // _monkey patch_ ellipsize
+        let ellipsize: fn(_, _) -> _ = if self.short {
+            ellipsize
+        } else {
+            // noop
+            (|x, _| Cow::Borrowed(x)) as _
+        };
+
+        for repo in &self.repos {
+            // print name
+            let name = &repo.full_name;
+            let name = ellipsize(name, 40);
+            write!(f, "{}", name)?;
+
+            // print description
+            write!(f, "\t",)?;
+            let desc = repo.description.as_ref().map(String::as_str).unwrap_or("");
+            let desc = ellipsize(desc, 80);
+            write!(f, "{}", desc)?;
+
+            // print archived status
+            write!(f, "\t",)?;
+            let archive = if repo.archived { "archived" } else { "" };
+            write!(f, "{}", archive)?;
+
+            // print visiblity
+            write!(f, "\t",)?;
+            let visibility = {
+                use shub::github::responses::RepositoryVisibility::*;
+                match repo.visibility {
+                    Public => "public",
+                    Private => "private",
+                }
+            };
+            write!(f, "{}", visibility)?;
 
             // print language
             write!(f, "\t",)?;

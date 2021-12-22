@@ -5,14 +5,16 @@
 Changes:
 
 - Upgrade Rust to edition 2021
+- Add `repos list` command to list owned repositories
+- Un-re-export `github` module in `shub` crate
 
 ## [0.2.0](https://github.com/kafji/shub/tree/v0.2.0) - 2021-09-04
 
 Breaking changes:
 
-- Remove URL column
-
-- Print repository full name in first column instead of name with its organization name omitted
+- `stars` command
+  - Remove URL column in
+  - Print repository full name in first column instead of name with its organization name omitted
 
 Changes:
 
@@ -20,9 +22,13 @@ Changes:
 
 ## [0.1.1](https://github.com/kafji/shub/tree/v0.1.1) - 2021-08-25
 
+Changes:
+
 - Add new commad to print starred repositories.
 
 ## [0.1.0](https://github.com/kafji/shub/tree/v0.1.0) - 2021-08-25
+
+Changes:
 
 - Initial release. Check [README.md](README.md) for more information.
 

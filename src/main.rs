@@ -1,16 +1,16 @@
 #![deny(rust_2018_idioms)]
 
+mod app;
+mod cli;
+
 use crate::{app::App, cli::*};
 use anyhow::Result;
 use futures::{future, TryStreamExt};
 use futures::{stream, StreamExt};
-use shub::{GhClient, PersonalAccessToken};
+use shub::github::{GhClient, PersonalAccessToken};
 use std::{env, sync::Arc};
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
-
-mod app;
-mod cli;
 
 async fn delete_all_workflow_runs(
     app: App<'_>,
@@ -57,6 +57,12 @@ async fn apply_settings<'a>(
     Ok(())
 }
 
+async fn list<'a>(app: App<'a>) -> Result<()> {
+    let app = Arc::new(app);
+    app.list_repos().await?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
@@ -83,6 +89,7 @@ async fn main() -> Result<()> {
         Repos(cmd) => {
             use ReposSubcommand::*;
             match cmd.cmd {
+                List(_) => list(app).await?,
                 DownloadSettings(cmd) => download_settings(app, cmd).await?,
                 ApplySettings(cmd) => apply_settings(app, cmd).await?,
             }

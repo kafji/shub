@@ -12,20 +12,36 @@ export SHUB_USERNAME=kafji  # your github username
 export SHUB_TOKEN=ghp_yourgithubaccesstoken  # your github personal access token
 ```
 
-## Commands
+## Examples
+
+### Delete all workflow runs in kafji/shub repository
 
 ```bash
-# delete all workflow runs in kafji/shub repository
 shub actions delete-runs kafji/shub
+```
 
-# download kafji/shub settings to a toml file
+### Download kafji/shub settings to a toml file
+
+```bash
 shub repos download-settings kafji/shub ./gh-repo-settings.toml
+```
 
-# apply repository settings to GitHub repository
+### Apply repository settings to GitHub repository
+
+```bash
 shub repos apply-settings ./gh-repo-settings.toml kafji/shub
+```
 
-# list starred repositories
+### List starred repositories
+
+```bash
 shub stars --short
+```
+
+### List owned public not-archived repositories
+
+```bash
+shub repos list | grep public | grep -v archived
 ```
 
 ## License & Contribution
