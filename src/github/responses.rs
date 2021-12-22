@@ -42,6 +42,7 @@ pub struct MyRepository {
     pub language: Option<String>,
     pub archived: bool,
     pub visibility: RepositoryVisibility,
+    pub fork: bool,
 }
 
 #[derive(Deserialize, PartialEq, Copy, Clone, Debug)]

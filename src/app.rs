@@ -180,10 +180,19 @@ impl fmt::Display for Tabulator<MyRepository> {
             let desc = ellipsize(desc, 80);
             write!(f, "{}", desc)?;
 
-            // print archived status
+            // print status i.e. is archived, is a fork
             write!(f, "\t",)?;
-            let archive = if repo.archived { "archived" } else { "" };
-            write!(f, "{}", archive)?;
+            let statuses = {
+                let mut v = Vec::new();
+                if repo.archived {
+                    v.push("archived");
+                }
+                if repo.fork {
+                    v.push("fork");
+                }
+                v
+            };
+            write!(f, "{}", statuses.join(","))?;
 
             // print visiblity
             write!(f, "\t",)?;
