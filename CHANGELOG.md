@@ -2,6 +2,10 @@
 
 ## [Unreleased](https://github.com/kafji/shub/tree/master)
 
+Breaking changes:
+
+- Rename `stars` command to `starred`
+
 Changes:
 
 - Upgrade Rust to edition 2021

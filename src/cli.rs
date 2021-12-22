@@ -14,7 +14,7 @@ pub struct Cli {
 pub enum Subcommand {
     Actions(Actions),
     Repos(Repos),
-    Stars(Stars),
+    Starred(Starred),
 }
 
 mod actions {
@@ -105,9 +105,9 @@ mod stars {
     use shub::app::LanguageFilter;
 
     #[derive(FromArgs, PartialEq, Debug)]
-    #[argh(subcommand, name = "stars")]
+    #[argh(subcommand, name = "starred")]
     /// List starred repositories.
-    pub struct Stars {
+    pub struct Starred {
         #[argh(option)]
         /// filter by language. Prefix with `!` to make a negation, i.e. `!rust` to filter out Rust.
         pub lang: Option<LangFilter>,

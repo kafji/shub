@@ -59,12 +59,6 @@ async fn apply_settings<'a>(
     Ok(())
 }
 
-async fn list<'a>(app: App<'a>) -> Result<()> {
-    let app = Arc::new(app);
-    app.list_repos().await?;
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
@@ -91,12 +85,12 @@ async fn main() -> Result<()> {
         Repos(cmd) => {
             use ReposSubcommand::*;
             match cmd.cmd {
-                List(_) => list(app).await?,
+                List(_) => app.list_repos().await?,
                 DownloadSettings(cmd) => download_settings(app, cmd).await?,
                 ApplySettings(cmd) => apply_settings(app, cmd).await?,
             }
         }
-        Stars(cmd) => app.list_starred(cmd.lang.map(|x| x.0).as_ref(), cmd.short).await?,
+        Starred(cmd) => app.list_starred(cmd.lang.map(|x| x.0).as_ref(), cmd.short).await?,
     };
 
     debug!("exiting");
