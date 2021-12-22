@@ -2,6 +2,10 @@
 
 ## [Unreleased](https://github.com/kafji/shub/tree/master)
 
+Changes:
+
+- Upgrade Rust to edition 2021
+
 ## [0.2.0](https://github.com/kafji/shub/tree/v0.2.0) - 2021-09-04
 
 Breaking changes:
