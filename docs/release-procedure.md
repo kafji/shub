@@ -4,23 +4,15 @@
 
     1. Fetch latest changes in `origin/master`.
 
-        ```
-        git fetch origin master
-        ```
-
     2. Checkout to `master`.
-
-        ```
-        git checkout master
-        ```
 
     3. Ensure it is up to date with `origin/master` and there are no pending changes locally.
 
         ```
-        git status
+        git fetch origin master && git checkout master && git status
         ```
 
-2. Verify current revision builds are green on [https://github.com/kafji/shub](https://github.com/kafji/shub).
+2. Verify current revision build is green on [https://github.com/kafji/shub](https://github.com/kafji/shub).
 
 3. Update documents.
 
