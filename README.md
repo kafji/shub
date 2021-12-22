@@ -1,6 +1,6 @@
 # Shub
 
-GitHub CLI.
+Kafji's GitHub CLI.
 
 ## Installation
 
