@@ -2,6 +2,8 @@
 
 ## [Unreleased](https://github.com/kafji/shub/tree/master)
 
+## [0.3.1](https://github.com/kafji/shub/tree/v0.3.1) - 2021-12-22
+
 Changes:
 
 - Add fork status in `repos list`
