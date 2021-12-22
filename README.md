@@ -5,10 +5,8 @@ Kafji's GitHub CLI.
 ## Installation
 
 ```bash
-# clone
-git clone git@github.com:kafji/shub.git && cd ./shub/
 # install
-cargo install --path=.
+cargo install --git https://github.com/kafji/shub
 # set github credentials
 export SHUB_USERNAME=kafji  # your github username
 export SHUB_TOKEN=ghp_yourgithubaccesstoken  # your github personal access token
