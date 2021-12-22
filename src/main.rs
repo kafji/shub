@@ -1,13 +1,15 @@
 #![deny(rust_2018_idioms)]
 
-mod app;
 mod cli;
 
-use crate::{app::App, cli::*};
+use crate::cli::*;
 use anyhow::Result;
 use futures::{future, TryStreamExt};
 use futures::{stream, StreamExt};
-use shub::github::{GhClient, PersonalAccessToken};
+use shub::{
+    app::App,
+    github::{GhClient, PersonalAccessToken},
+};
 use std::{env, sync::Arc};
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
@@ -68,7 +70,7 @@ async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
     let cmd = cli::cmd();
-    debug!(?cmd, "launched");
+    debug!(?cmd, "started");
 
     // create app
     let username = env::var("SHUB_USERNAME")?;
@@ -94,7 +96,7 @@ async fn main() -> Result<()> {
                 ApplySettings(cmd) => apply_settings(app, cmd).await?,
             }
         }
-        Stars(cmd) => app.list_starred(cmd.lang.as_ref(), cmd.short).await?,
+        Stars(cmd) => app.list_starred(cmd.lang.map(|x| x.0).as_ref(), cmd.short).await?,
     };
 
     debug!("exiting");

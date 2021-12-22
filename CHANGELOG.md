@@ -7,6 +7,7 @@ Changes:
 - Upgrade Rust to edition 2021
 - Add `repos list` command to list owned repositories
 - Un-re-export `github` module in `shub` crate
+- Move `app` module into `shub`'s `lib` crate
 
 ## [0.2.0](https://github.com/kafji/shub/tree/v0.2.0) - 2021-09-04
 

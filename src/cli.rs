@@ -1,7 +1,6 @@
+pub use self::{actions::*, repos::*, stars::*};
 use argh::FromArgs;
 use std::{convert::Infallible, str::FromStr};
-
-pub use self::{actions::*, repos::*, stars::*};
 
 #[derive(FromArgs, PartialEq, Debug)]
 /// Yet another GitHub CLI.
@@ -103,6 +102,7 @@ mod repos {
 
 mod stars {
     use super::*;
+    use shub::app::LanguageFilter;
 
     #[derive(FromArgs, PartialEq, Debug)]
     #[argh(subcommand, name = "stars")]
@@ -118,9 +118,12 @@ mod stars {
     }
 
     #[derive(PartialEq, Debug)]
-    pub struct LangFilter {
-        pub negation: bool,
-        pub lang: String,
+    pub struct LangFilter(pub LanguageFilter);
+
+    impl From<LanguageFilter> for LangFilter {
+        fn from(s: LanguageFilter) -> Self {
+            Self(s)
+        }
     }
 
     impl FromStr for LangFilter {
@@ -128,11 +131,11 @@ mod stars {
 
         fn from_str(s: &str) -> Result<Self, Self::Err> {
             let f = if s.starts_with('!') {
-                LangFilter { negation: true, lang: s[1..].to_owned() }
+                LanguageFilter { negation: true, language: s[1..].to_owned() }
             } else {
-                LangFilter { negation: false, lang: s.to_owned() }
+                LanguageFilter { negation: false, language: s.to_owned() }
             };
-            Ok(f)
+            Ok(Self(f))
         }
     }
 
@@ -140,11 +143,20 @@ mod stars {
     #[test]
     fn test_parse_lang_filter() {
         // trivial
-        assert_eq!(LangFilter { negation: false, lang: "rust".into() }, "rust".parse().unwrap());
+        assert_eq!(
+            LanguageFilter { negation: false, language: "rust".into() },
+            "rust".parse::<LangFilter>().unwrap().0
+        );
         // trivial negation
-        assert_eq!(LangFilter { negation: true, lang: "rust".into() }, "!rust".parse().unwrap());
+        assert_eq!(
+            LanguageFilter { negation: true, language: "rust".into() },
+            "!rust".parse::<LangFilter>().unwrap().0
+        );
         // symbols
-        assert_eq!(LangFilter { negation: true, lang: "@#$%".into() }, "!@#$%".parse().unwrap());
+        assert_eq!(
+            LanguageFilter { negation: true, language: "@#$%".into() },
+            "!@#$%".parse::<LangFilter>().unwrap().0
+        );
     }
 }
 

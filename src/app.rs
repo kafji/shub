@@ -1,12 +1,11 @@
-use crate::cli::LangFilter;
-use anyhow::Result;
-use futures::{future, stream::TryStreamExt};
-use serde::{Deserialize, Serialize};
-use shub::github::{
+use crate::github::{
     client::GhClient,
     requests::{RepositoryType, UpdateRepository},
     responses::{MyRepository, Repository, StarredRepository, WorkflowRun},
 };
+use anyhow::Result;
+use futures::{future, stream::TryStreamExt};
+use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt, io::Write, path::Path};
 use tabwriter::TabWriter;
 use tokio::fs;
@@ -65,7 +64,11 @@ impl App<'_> {
         Ok(())
     }
 
-    pub async fn list_starred(&self, lang_filter: Option<&LangFilter>, short: bool) -> Result<()> {
+    pub async fn list_starred(
+        &self,
+        language_filter: Option<&LanguageFilter>,
+        short: bool,
+    ) -> Result<()> {
         let mut out = {
             let w = std::io::stdout();
             TabWriter::new(w)
@@ -76,11 +79,11 @@ impl App<'_> {
             .activity()
             .get_starred()
             .try_filter(|repo| {
-                let pass = lang_filter
-                    .and_then(|LangFilter { negation, lang }| {
+                let pass = language_filter
+                    .and_then(|LanguageFilter { negation, language }| {
                         repo.language
                             .as_ref()
-                            .map(|x| x.to_ascii_lowercase() == lang.to_ascii_lowercase())
+                            .map(|x| x.to_ascii_lowercase() == language.to_ascii_lowercase())
                             .or_else(|| false.into())
                             .map(|x| if *negation { !x } else { x })
                     })
@@ -185,7 +188,7 @@ impl fmt::Display for Tabulator<MyRepository> {
             // print visiblity
             write!(f, "\t",)?;
             let visibility = {
-                use shub::github::responses::RepositoryVisibility::*;
+                use crate::github::responses::RepositoryVisibility::*;
                 match repo.visibility {
                     Public => "public",
                     Private => "private",
@@ -300,4 +303,10 @@ impl Into<UpdateRepository> for RepositorySettings {
             delete_branch_on_merge,
         }
     }
+}
+
+#[derive(PartialEq, Debug)]
+pub struct LanguageFilter {
+    pub negation: bool,
+    pub language: String,
 }

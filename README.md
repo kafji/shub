@@ -32,10 +32,10 @@ shub repos download-settings kafji/shub ./gh-repo-settings.toml
 shub repos apply-settings ./gh-repo-settings.toml kafji/shub
 ```
 
-### List starred repositories
+### List starred repositories written in language other than Kotlin
 
 ```bash
-shub stars --short
+shub stars --short --lang '!kotlin'
 ```
 
 ### List owned public not-archived repositories
