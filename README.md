@@ -2,7 +2,7 @@
 
 Kafji's GitHub CLI.
 
-## Installation
+## Install
 
 ```bash
 # install
