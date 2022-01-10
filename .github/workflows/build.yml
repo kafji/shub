@@ -1,14 +1,13 @@
 # https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions
 
-# Verifies revision is buildable and passing all tests.
-name: Check
+name: Build
 
 on:
   push:
   pull_request:
 
 jobs:
-  check:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -16,7 +15,8 @@ jobs:
       RUST_LOG: debug
     steps:
       - uses: actions/checkout@v2
-      - id: cache-cargo
+
+      - name: Restore Cargo cache
         uses: actions/cache@v2
         with:
           # https://doc.rust-lang.org/cargo/guide/cargo-home.html#caching-the-cargo-home-in-ci
@@ -25,11 +25,9 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: cargo-${{ runner.os }}-${{ hashFiles('./Cargo.toml', './Cargo.lock') }}-${{ github.sha }}
+          key: cargo-${{ runner.os }}-${{ hashFiles('./Cargo.toml', './Cargo.lock') }}
           restore-keys: |
-            cargo-${{ runner.os }}-${{ hashFiles('./Cargo.toml', './Cargo.lock') }}-
             cargo-${{ runner.os }}-
-      - name: Build
-        run: cargo build --verbose --all
+
       - name: Test
-        run: cargo test --verbose --all
+        run: cargo test
