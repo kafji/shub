@@ -6,7 +6,7 @@ Kafji's workspace CLI.
 
 ```bash
 # install
-cargo install --git https://github.com/kafji/shub
+cargo install --git 'ssh://git@github.com/kafji/shub.git'
 # set github credentials
 export SHUB_USERNAME=kafji  # your github username
 export SHUB_TOKEN=ghp_yourgithubaccesstoken  # your github personal access token
