@@ -1,266 +1,322 @@
-use crate::github::{
-    client::GhClient,
-    requests::{RepositoryType, UpdateRepository},
-    responses::{MyRepository, Repository, StarredRepository, WorkflowRun},
+use crate::{
+    display::RelativeFromNow,
+    github_client::GitHubClientImpl,
+    github_models::{GhCheckRun, GhCommit, GhRepository},
+    kceh, local_repository_path, GetRepositoryId, OwnedRepository, PartialRepositoryId,
+    RepositoryId, Secret, StarredRepository,
 };
-use anyhow::Result;
-use futures::{future, stream::TryStreamExt};
+use anyhow::{bail, ensure, Context, Error, Result};
+use async_trait::async_trait;
+use console::Term;
+use dialoguer::Confirm;
+use futures::{
+    future,
+    stream::{LocalBoxStream, StreamExt, TryStreamExt},
+};
+use git2::{build::RepoBuilder, Cred, FetchOptions, RemoteCallbacks};
+use http::header::HeaderName;
+use indoc::formatdoc;
+use octocrab::Octocrab;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, fmt, io::Write, path::Path};
-use tabwriter::TabWriter;
-use tokio::fs;
-use tracing::debug;
+use serde_json::Value;
+use std::{
+    borrow::Cow, collections::HashMap, env, fmt, io::Write, path::Path, process::Command,
+    time::Duration,
+};
+use tokio::task;
 
-#[derive(Debug)]
-pub struct App<'a> {
-    pub username: &'a str,
-    pub client: GhClient,
-}
-
-impl App<'_> {
-    pub async fn delete_all_workflow_runs(&self, owner: Option<&str>, repo: &str) -> Result<()> {
-        let owner = owner.unwrap_or(self.username);
-        println!("Deleting workflow runs in {}/{}.", owner, repo);
-        let deleted = self
-            .client
-            .actions()
-            .list_workflow_runs(owner, repo)
-            .and_then(move |WorkflowRun { id, .. }| async move {
-                self.client.actions().delete_workflow_run(owner, repo, id).await?;
-                Ok(())
-            })
-            .try_fold(0, |acc, _| future::ok(acc + 1))
-            .await?;
-        println!("{} workflow runs deleted.", deleted);
-        Ok(())
-    }
-
-    pub async fn download_settings(
-        &self,
-        owner: Option<&str>,
-        repo: &str,
-        file: &Path,
-    ) -> Result<()> {
-        let owner = owner.unwrap_or(self.username);
-        let path = file;
-        println!("Downloading GitHub repository settings for {}/{} to {:?}.", owner, repo, path);
-        let settings: RepositorySettings =
-            self.client.repos().get_repository(owner, repo).await?.into();
-        let buf = toml::to_vec(&settings)?;
-        debug!(?settings, ?path, "writing settings");
-        fs::write(path, &buf).await?;
-        Ok(())
-    }
-
-    pub async fn apply_settings(&self, owner: Option<&str>, repo: &str, file: &Path) -> Result<()> {
-        let owner = owner.unwrap_or(self.username);
-        let path = file;
-        println!("Applying GitHub repository settings from {:?} for {}/{}.", path, owner, repo,);
-        let settings = fs::read(path).await?;
-        let settings: RepositorySettings = toml::from_slice(&settings)?;
-        debug!(?settings, "applying settings");
-        let settings = settings.into();
-        self.client.repos().update_repository(owner, repo, &settings).await?;
-        Ok(())
-    }
-
-    pub async fn list_starred(
-        &self,
-        language_filter: Option<&LanguageFilter>,
-        short: bool,
-    ) -> Result<()> {
-        let mut out = {
-            let w = std::io::stdout();
-            TabWriter::new(w)
-        };
-
-        let starred = self
-            .client
-            .activity()
-            .get_starred()
-            .try_filter(|repo| {
-                let pass = language_filter
-                    .and_then(|LanguageFilter { negation, language }| {
-                        repo.language
-                            .as_ref()
-                            .map(|x| x.to_ascii_lowercase() == language.to_ascii_lowercase())
-                            .or_else(|| false.into())
-                            .map(|x| if *negation { !x } else { x })
-                    })
-                    .unwrap_or(true);
-                future::ready(pass)
-            })
-            .try_collect::<Vec<_>>()
-            .await?;
-
-        let starred = Tabulator { repos: starred, short };
-        write!(&mut out, "{}", starred)?;
-        out.flush()?;
-
-        Ok(())
-    }
-
-    pub async fn list_repos(&self) -> Result<()> {
-        let mut out = {
-            let w = std::io::stdout();
-            TabWriter::new(w)
-        };
-
-        let client = self.client.repos();
-        let repos = client.list_my_repositories(RepositoryType::Owner.into());
-        let repos: Vec<_> = repos.try_collect().await?;
-
-        let tabulator = Tabulator { repos, short: false };
-        write!(&mut out, "{}", tabulator)?;
-        out.flush()?;
-
-        Ok(())
-    }
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub struct AppConfig<'a> {
+    pub github_username: &'a str,
+    pub github_token: Secret<&'a str>,
+    pub workspace_root_dir: &'a Path,
 }
 
 #[derive(Debug)]
-struct Tabulator<R> {
-    repos: Vec<R>,
-    short: bool,
+pub struct App<'a, GitHubClient> {
+    github_username: &'a str,
+    workspace_root_dir: &'a Path,
+    github_client: GitHubClient,
 }
 
-impl fmt::Display for Tabulator<StarredRepository> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ellipsize: fn(_, _) -> _ = if self.short {
-            ellipsize
-        } else {
-            // noop
-            (|x, _| Cow::Borrowed(x)) as _
+impl<'a> App<'a, GitHubClientImpl> {
+    pub fn new(
+        AppConfig { github_username, github_token, workspace_root_dir }: AppConfig<'a>,
+    ) -> Result<Self, Error> {
+        let github_client =
+            crate::github_client::GitHubClientImpl::new(github_token.map(ToOwned::to_owned))?;
+        let s = Self { github_username, workspace_root_dir, github_client };
+        Ok(s)
+    }
+}
+
+impl<'a, GitHubClient> App<'a, GitHubClient>
+where
+    GitHubClient: self::GitHubClient<'a>,
+{
+    pub async fn view_repository_settings(
+        &'a self,
+        repo_id: PartialRepositoryId,
+    ) -> Result<(), Error> {
+        let repo_id = repo_id.complete(self.github_username);
+        let repo = self.github_client.get_repository(repo_id).await?;
+        let settings = repo.extract_repository_settings()?;
+        println!("{}", settings);
+        Ok(())
+    }
+
+    pub async fn apply_repository_settings(
+        &self,
+        from: PartialRepositoryId,
+        to: PartialRepositoryId,
+    ) -> Result<(), Error> {
+        let from = from.complete(self.github_username);
+        let to = to.complete(self.github_username);
+
+        let client = create_client()?;
+
+        let get_settings = |repo_id: RepositoryId| {
+            let client = client.clone();
+            let RepositoryId { owner, name } = repo_id;
+            async move {
+                let repo = client.repos(owner, name).get().await?;
+                let settings = repo.extract_repository_settings()?;
+                Result::<_, Error>::Ok(settings)
+            }
         };
 
-        for repo in &self.repos {
-            // print name
-            let name = &repo.full_name;
-            let name = ellipsize(name, 40);
-            write!(f, "{}", name)?;
+        let old_settings = get_settings(to.clone()).await?;
+        let new_settings = get_settings(from.clone()).await?;
+        let diff = RepositorySettingsDiff::new(&old_settings, &new_settings);
 
-            // print description
-            write!(f, "\t",)?;
-            let desc = repo.description.as_ref().map(String::as_str).unwrap_or("");
-            let desc = ellipsize(desc, 80);
-            write!(f, "{}", desc)?;
+        println!("{}", diff);
 
-            // print language
-            write!(f, "\t",)?;
-            let lang = repo.language.as_ref().map(String::as_str).unwrap_or("");
-            let lang = ellipsize(lang, 20);
-            write!(f, "{}", lang)?;
+        if !Confirm::new()
+            .with_prompt("Apply settings?")
+            .default(false)
+            .show_default(true)
+            .wait_for_newline(true)
+            .interact()?
+        {
+            return Ok(());
+        }
 
-            write!(f, "\n")?;
+        let _: HashMap<String, Value> = {
+            let RepositoryId { owner, name } = to;
+            client.patch(format!("repos/{owner}/{name}"), Some(&new_settings)).await?
+        };
+
+        Ok(())
+    }
+
+    pub async fn list_starred_repositories(&'a self) -> Result<(), Error> {
+        let repos = self.github_client.list_stared_repositories();
+        repos
+            .map_ok(StarredRepository)
+            .try_for_each(|repo| {
+                println!("{}", repo);
+                future::ok(())
+            })
+            .await?;
+        Ok(())
+    }
+
+    pub async fn open_repository(
+        &'a self,
+        repo_id: Option<PartialRepositoryId>,
+        upstream: bool,
+    ) -> Result<(), Error> {
+        let repo_id = match repo_id {
+            Some(repo_id) => repo_id.complete(self.github_username),
+            None => repo_id_for_cwd().await?,
+        };
+
+        let repo = self.github_client.get_repository(repo_id.clone()).await?;
+
+        let url = if upstream {
+            if !repo.fork.unwrap_or_default() {
+                bail!("Repository {repo_id} is not a fork.")
+            }
+            repo.parent
+                .and_then(|x| x.html_url)
+                .expect("Forked repository should have the HTML URL to its parent repository.")
+        } else {
+            repo.html_url.expect("Repository should have the HTML URL to itself.")
+        };
+
+        Command::new("xdg-open").arg(url.as_str()).status()?;
+
+        Ok(())
+    }
+
+    pub async fn list_owned_repositories(&'a self) -> Result<(), Error> {
+        let repos = self.github_client.list_owned_repositories();
+        repos
+            .and_then(|repo| async {
+                let repo_id = repo.get_repository_id()?;
+                let commits: Vec<_> = {
+                    let commits = self.github_client.list_repository_commits(&repo_id);
+                    commits.take(1).try_collect().await?
+                };
+                let commit = commits.first().map(ToOwned::to_owned);
+                Ok(OwnedRepository(repo, commit))
+            })
+            .try_for_each(|repo| {
+                println!("{}", repo);
+                future::ok(())
+            })
+            .await?;
+        Ok(())
+    }
+
+    pub async fn fork_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error> {
+        self.github_client.fork_repository(repo_id).await?;
+        Ok(())
+    }
+
+    pub async fn clone_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
+        let repo_id = repo_id.complete(self.github_username);
+
+        let repo_info = self.github_client.get_repository(repo_id.clone()).await?;
+
+        let ssh_url = repo_info
+            .ssh_url
+            .ok_or_else(|| Error::msg("Expecting repository to have ssh url, but was not."))?;
+
+        let upstream_url = match repo_info.parent {
+            Some(upstream) => upstream
+                .ssh_url
+                .ok_or_else(|| {
+                    Error::msg("Expecting upstream repository to have ssh url, but was not.")
+                })?
+                .into(),
+            None => None,
+        };
+
+        let workspace_home = self.workspace_root_dir;
+        let path = local_repository_path(workspace_home, &repo_id);
+        println!("Cloning {repo_id} repository to {path}.", path = path.display());
+        let repo = RepoBuilder::new()
+            .fetch_options(create_fetch_options())
+            .clone(&ssh_url, &path)
+            .context("Failed to clone repository.")?;
+
+        if let Some(upstream_url) = upstream_url {
+            let mut remote =
+                repo.remote("upstream", &upstream_url).context("Failed to add upstream remote.")?;
+            let mut options = {
+                let mut opts = create_fetch_options();
+                opts.prune(git2::FetchPrune::On);
+                opts
+            };
+            remote
+                .fetch(&["+refs/heads/*:refs/remotes/origin/*"], Some(&mut options), None)
+                .context("Failed to fetch upstream.")?;
         }
 
         Ok(())
     }
-}
 
-impl fmt::Display for Tabulator<MyRepository> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // _monkey patch_ ellipsize
-        let ellipsize: fn(_, _) -> _ = if self.short {
-            ellipsize
-        } else {
-            // noop
-            (|x, _| Cow::Borrowed(x)) as _
+    pub async fn delete_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
+        let repo_id = repo_id.complete(self.github_username);
+        let repo = self.github_client.get_repository(repo_id.clone()).await?;
+        ensure!(repo.fork.unwrap_or_default());
+        self.github_client.delete_repository(repo_id).await?;
+        Ok(())
+    }
+
+    pub async fn check_repository(
+        &'a self,
+        repo_id: Option<PartialRepositoryId>,
+    ) -> Result<(), Error> {
+        let mut stdout = Term::buffered_stdout();
+
+        let repo_id = match repo_id {
+            Some(repo_id) => repo_id.complete(self.github_username),
+            None => repo_id_for_cwd().await?,
         };
+        writeln!(stdout, "{repo_id}")?;
+        stdout.flush()?;
 
-        for repo in &self.repos {
-            // print name
-            let name = &repo.full_name;
-            let name = ellipsize(name, 40);
-            write!(f, "{}", name)?;
+        writeln!(stdout, "/----------")?;
 
-            // print description
-            write!(f, "\t",)?;
-            let desc = repo.description.as_ref().map(String::as_str).unwrap_or("");
-            let desc = ellipsize(desc, 80);
-            write!(f, "{}", desc)?;
-
-            // print status i.e. is archived, is a fork
-            write!(f, "\t",)?;
-            let statuses = {
-                let mut v = Vec::new();
-                if repo.archived {
-                    v.push("archived");
-                }
-                if repo.fork {
-                    v.push("fork");
-                }
-                v
+        let commit = {
+            let commits: Vec<_> = {
+                let commits = self.github_client.list_repository_commits(&repo_id);
+                commits.take(1).try_collect().await?
             };
-            write!(f, "{}", statuses.join(","))?;
+            commits.first().map(ToOwned::to_owned)
+        };
+        let commit = match commit {
+            Some(x) => x,
+            None => bail!("Repository {repo_id} doesn't have a commit yet."),
+        };
+        let commit_author = {
+            let mut buf = String::new();
+            let author = &commit.commit.author;
+            buf.extend(author.name.as_ref().map(Cow::Borrowed).unwrap_or_default().chars());
+            buf.push('<');
+            buf.extend(author.email.as_ref().map(Cow::Borrowed).unwrap_or_default().chars());
+            buf.push('>');
+            buf
+        };
+        writeln!(
+            stdout,
+            "{commit_author} - {}\n{}\n{}",
+            commit.commit.author.date.relative_from_now(),
+            commit.sha,
+            commit.commit.message
+        )?;
+        stdout.flush()?;
 
-            // print visiblity
-            write!(f, "\t",)?;
-            let visibility = {
-                use crate::github::responses::RepositoryVisibility::*;
-                match repo.visibility {
-                    Public => "public",
-                    Private => "private",
-                }
-            };
-            write!(f, "{}", visibility)?;
+        writeln!(stdout, "/----------")?;
 
-            // print language
-            write!(f, "\t",)?;
-            let lang = repo.language.as_ref().map(String::as_str).unwrap_or("");
-            let lang = ellipsize(lang, 20);
-            write!(f, "{}", lang)?;
-
-            write!(f, "\n")?;
+        loop {
+            let checks =
+                self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
+            for c in &checks {
+                writeln!(
+                    stdout,
+                    "{}: {} - {}",
+                    c.name,
+                    kceh::snake_case_to_statement(c.conclusion.as_deref().unwrap_or(&c.status)),
+                    c.completed_at.unwrap_or(c.started_at).relative_from_now()
+                )?;
+            }
+            stdout.flush()?;
+            let completed = checks.iter().map(|x| x.completed_at.is_some()).all(|x| x);
+            if completed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(fastrand::u64(10..=20))).await;
+            stdout.clear_last_lines(checks.len())?;
         }
 
+        stdout.flush()?;
         Ok(())
     }
 }
 
-fn ellipsize(text: &str, threshold: usize) -> Cow<'_, str> {
-    // todo(kfj): convert to type error?
-    debug_assert!(threshold > 3);
-
-    if text.len() <= threshold {
-        text.into()
-    } else {
-        let text = text.chars().take(threshold - 3);
-        let ellipsis = (0..3).map(|_| '.');
-        let s: String = text.chain(ellipsis).collect();
-        s.into()
-    }
+fn create_fetch_options<'a>() -> FetchOptions<'a> {
+    let mut opts = FetchOptions::new();
+    opts.remote_callbacks(create_remote_callbacks());
+    opts
 }
 
-#[cfg(test)]
-#[test]
-fn test_ellipsize() {
-    use quickcheck::{quickcheck, TestResult};
-
-    fn has_max_length_threshold(text: String, threshold: usize) -> TestResult {
-        if threshold < 4 {
-            return TestResult::discard();
-        }
-        TestResult::from_bool(ellipsize(&text, threshold).chars().count() <= threshold)
-    }
-
-    quickcheck(has_max_length_threshold as fn(_, _) -> TestResult);
-
-    fn has_ellipsis_at_the_end(text: String, threshold: usize) -> TestResult {
-        if threshold < 4 {
-            return TestResult::discard();
-        }
-        if text.chars().count() <= threshold {
-            return TestResult::discard();
-        }
-        let ellipsized = ellipsize(&text, threshold);
-        TestResult::from_bool(ellipsized.ends_with("..."))
-    }
-
-    quickcheck(has_ellipsis_at_the_end as fn(_, _) -> TestResult);
+fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
+    let mut cbs = RemoteCallbacks::new();
+    cbs.credentials(|_url, username_from_url, _credential_type| {
+        let username = username_from_url.unwrap_or("git");
+        Cred::ssh_key_from_agent(username)
+    });
+    cbs
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+trait ExtractRepositorySettings {
+    fn extract_repository_settings(&self) -> Result<RepositorySettings, Error>;
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Copy, Clone, Debug)]
 struct RepositorySettings {
     allow_rebase_merge: bool,
     allow_squash_merge: bool,
@@ -269,53 +325,129 @@ struct RepositorySettings {
     allow_merge_commit: bool,
 }
 
-impl From<Repository> for RepositorySettings {
-    fn from(
-        Repository {
-            allow_rebase_merge,
-            allow_squash_merge,
-            allow_auto_merge,
-            delete_branch_on_merge,
-            allow_merge_commit,
-            ..
-        }: Repository,
-    ) -> Self {
-        Self {
-            allow_rebase_merge,
-            allow_squash_merge,
-            allow_auto_merge,
-            delete_branch_on_merge,
-            allow_merge_commit,
-        }
+macro_rules! write_key {
+    ($w:expr, $this:expr, $key:ident) => {{
+        let val = $this.$key;
+        write!($w, "{key:>25} = {val:5}\n", key = stringify!($key))
+    }};
+}
+
+impl fmt::Display for RepositorySettings {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write_key!(f, self, allow_rebase_merge)?;
+        write_key!(f, self, allow_squash_merge)?;
+        write_key!(f, self, allow_auto_merge)?;
+        write_key!(f, self, delete_branch_on_merge)?;
+        write_key!(f, self, allow_merge_commit)?;
+        Ok(())
     }
 }
 
-impl Into<UpdateRepository> for RepositorySettings {
-    fn into(self) -> UpdateRepository {
-        let RepositorySettings {
-            allow_squash_merge,
-            allow_merge_commit,
-            allow_rebase_merge,
-            allow_auto_merge,
-            delete_branch_on_merge,
-        } = self;
-        let allow_squash_merge = allow_squash_merge.into();
-        let allow_merge_commit = allow_merge_commit.into();
-        let allow_rebase_merge = allow_rebase_merge.into();
-        let allow_auto_merge = allow_auto_merge.into();
-        let delete_branch_on_merge = delete_branch_on_merge.into();
-        UpdateRepository {
-            allow_squash_merge,
-            allow_merge_commit,
-            allow_rebase_merge,
-            allow_auto_merge,
-            delete_branch_on_merge,
-        }
+macro_rules! extract_key {
+    ($repo:expr, $key:ident) => {
+        $repo.$key.ok_or_else(|| {
+            Error::msg(formatdoc!("Missing value for key `{key}`.", key = stringify!($key)))
+        })
+    };
+}
+
+impl ExtractRepositorySettings for GhRepository {
+    fn extract_repository_settings(&self) -> Result<RepositorySettings, Error> {
+        let repo = self;
+        let s = RepositorySettings {
+            allow_rebase_merge: extract_key!(repo, allow_rebase_merge)?,
+            allow_squash_merge: extract_key!(repo, allow_squash_merge)?,
+            allow_auto_merge: extract_key!(repo, allow_auto_merge)?,
+            delete_branch_on_merge: extract_key!(repo, delete_branch_on_merge)?,
+            allow_merge_commit: extract_key!(repo, allow_merge_commit)?,
+        };
+        Ok(s)
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub struct LanguageFilter {
-    pub negation: bool,
-    pub language: String,
+#[derive(PartialEq, Clone, Debug)]
+struct RepositorySettingsDiff<'a> {
+    old: &'a RepositorySettings,
+    new: &'a RepositorySettings,
+}
+
+impl<'a> RepositorySettingsDiff<'a> {
+    fn new(old: &'a RepositorySettings, new: &'a RepositorySettings) -> Self {
+        Self { old, new }
+    }
+}
+
+macro_rules! diff_key {
+    ($w:expr, $this:expr, $key:ident) => {{
+        let old = $this.old.$key;
+        let new = $this.new.$key;
+        write!($w, "{key:>25} = {old:>5} -> {new:<5}\n", key = stringify!($key))
+    }};
+}
+
+impl fmt::Display for RepositorySettingsDiff<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        diff_key!(f, self, allow_rebase_merge)?;
+        diff_key!(f, self, allow_squash_merge)?;
+        diff_key!(f, self, allow_auto_merge)?;
+        diff_key!(f, self, delete_branch_on_merge)?;
+        diff_key!(f, self, allow_merge_commit)?;
+        Ok(())
+    }
+}
+
+async fn repo_id_for_cwd() -> Result<RepositoryId, Error> {
+    task::block_in_place(|| {
+        let repo = git2::Repository::discover(".")?;
+        let origin = repo.find_remote("origin")?;
+        let url = origin.url().unwrap();
+        let start = url.find(':').unwrap();
+        let end = url.find(".git").unwrap();
+        let repo_id = &url[start + 1..end];
+        let repo_id = repo_id.parse()?;
+        Ok(repo_id)
+    })
+}
+
+#[deprecated]
+fn create_client() -> Result<Octocrab, Error> {
+    let user_agent =
+        concat!(env!("CARGO_PKG_NAME"), concat!("/", env!("CARGO_PKG_VERSION"))).to_owned();
+    let token = env::var("SHUB_TOKEN")?;
+    let client = Octocrab::builder()
+        .add_header(HeaderName::from_static("user-agent"), user_agent)
+        .personal_token(token)
+        .build()?;
+    Ok(client)
+}
+
+#[async_trait]
+pub trait GitHubClient<'a> {
+    /// https://docs.github.com/en/rest/reference/repos#list-repositories-for-the-authenticated-user
+    fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>>;
+
+    fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>>;
+
+    /// https://docs.github.com/en/rest/reference/commits#list-commits
+    fn list_repository_commits<'b>(
+        &'a self,
+        repo_id: &'b RepositoryId,
+    ) -> LocalBoxStream<'b, Result<GhCommit, Error>>
+    where
+        'a: 'b;
+
+    /// https://docs.github.com/en/rest/reference/checks#list-check-runs-for-a-git-reference
+    async fn get_check_runs_for_gitref<'b>(
+        &'a self,
+        repo_id: &'b RepositoryId,
+        gitref: &'b str,
+    ) -> Result<Vec<GhCheckRun>, Error>
+    where
+        'a: 'b;
+
+    async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<GhRepository, Error>;
+
+    async fn delete_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error>;
+
+    async fn fork_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error>;
 }

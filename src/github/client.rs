@@ -1,4 +1,4 @@
-use self::{actions::*, activity::*, repos::*};
+use self::{actions::*, repos::*};
 use super::{
     error::Error,
     requests::UpdateRepository,
@@ -9,10 +9,7 @@ use http::{
     header::{ACCEPT, AUTHORIZATION, USER_AGENT},
     HeaderMap, HeaderValue,
 };
-use lembaran::{
-    stream::pagination,
-    web_linking::{self, Link, Param},
-};
+use lembaran::LinkedPages;
 use reqwest::{Client, ClientBuilder};
 use std::{convert::TryInto, result::Result};
 use tracing::debug;
@@ -168,61 +165,6 @@ mod actions {
             debug!(?response, "received response");
             response.error_for_status()?;
             Ok(())
-        }
-    }
-}
-
-mod activity {
-    use super::*;
-    use crate::github::responses::StarredRepository;
-
-    #[derive(Debug)]
-    /// GitHub's activity resource.
-    ///
-    /// [GitHub Docs].
-    ///
-    /// [GitHub Docs]: https://docs.github.com/en/rest/reference/activity
-    pub struct GhActivity<'c> {
-        pub client: &'c GhClient,
-    }
-
-    impl GhActivity<'_> {
-        /// List repositories starred by the authenticated user.
-        ///
-        /// [GitHub Docs].
-        ///
-        /// [GitHub Docs]: https://docs.github.com/en/rest/reference/activity#list-repositories-starred-by-the-authenticated-user
-        pub fn get_starred(&self) -> impl TryStream<Ok = StarredRepository, Error = Error> + '_ {
-            pagination::with_factory(move |url: Option<Url>| async move {
-                let url = match url {
-                    Some(x) => x,
-                    None => self.client.build_url("/user/starred"),
-                };
-                let request = self.client.http.get(url).query(&[("per_page", "100")]);
-                debug!(?request, "sending request");
-                let response = request.send().await?;
-                debug!(?response, "received response");
-                let response = response.error_for_status()?;
-                let next_page_url = web_linking::http::from_headers(response.headers())
-                    .find(|Link { params, .. }| {
-                        params
-                            .iter()
-                            .find(|Param { name, value }| {
-                                *name == "rel" && value.as_deref() == Some("next".into())
-                            })
-                            .is_some()
-                    })
-                    .map(|Link { uri, .. }| uri)
-                    .map(|x| String::from_utf8_lossy(&**x).parse::<Url>())
-                    .transpose()?;
-                let response_body: Vec<_> = response.json().await?;
-                debug!(?response_body, "response body");
-                Ok((response_body, next_page_url))
-            })
-            .flat_map(|x: ClientResult<Vec<_>>| match x {
-                Ok(x) => stream::iter(x).map(|x| Ok(x)).boxed(),
-                Err(x) => stream::once(future::ready(Err(x))).boxed(),
-            })
         }
     }
 }
@@ -404,31 +346,5 @@ mod repos {
             server.abort();
             server.await.ok();
         }
-    }
-}
-
-trait NextPage {
-    type Error;
-
-    fn get_next_page_url(&self) -> Result<Option<Url>, Self::Error>;
-}
-
-impl NextPage for reqwest::Response {
-    type Error = url::ParseError;
-
-    fn get_next_page_url(&self) -> Result<Option<Url>, Self::Error> {
-        let headers = self.headers();
-        let mut links = web_linking::http::from_headers(headers);
-        links
-            .find(|Link { params, .. }| {
-                params
-                    .iter()
-                    .find(|Param { name, value }| {
-                        *name == "rel" && value.as_deref() == Some("next".into())
-                    })
-                    .is_some()
-            })
-            .map(|Link { uri, .. }| String::from_utf8_lossy(uri).parse::<Url>())
-            .transpose()
     }
 }

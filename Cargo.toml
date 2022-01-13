@@ -6,27 +6,31 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-argh = "0.1"
+async-stream = "0.3"
 async-trait = "0.1"
-base64 = "0.13"
-dotenv = "0.15"
+chrono = "0.4"
+clap = { version = "3", default-features = false, features = [
+  "std",
+  "derive",
+  "cargo",
+] }
+console = "0.15"
+dialoguer = "0.9"
+fastrand = "1"
 futures = "0.3"
-indoc = "1"
+git2 = "0.13"
 http = "0.2"
-lembaran = { version = "0.2", features = ["stream", "ext_http"] }
-reqwest = { version = "0.11", features = ["json"] }
+indoc = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-thiserror = "1"
-tabwriter = "1"
 tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
 toml = "0.5"
-tracing = { version = "0.1", features = ["max_level_debug"] }
-tracing-subscriber = "0.2"
-url = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+octocrab = { git = "https://github.com/XAMPPRocky/octocrab" }
 
 [dev-dependencies]
-assert_cmd = "2"
-warp = { version = "0.3", default-features = false }
 quickcheck = "1"
+quickcheck_macros = "1"
 tempfile = "3"
