@@ -1,11 +1,14 @@
 use crate::{PartialRepositoryId, RepositoryId};
-use anyhow::{bail, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use dialoguer::Confirm;
 use futures::{future, stream::TryStreamExt, Stream, StreamExt};
-use git2::Repository as GitRepository;
+use git2::{
+    build::RepoBuilder, Cred, CredentialType, FetchOptions, RemoteCallbacks,
+    Repository as GitRepository,
+};
 use http::{header::HeaderName, StatusCode};
 use indoc::formatdoc;
 use octocrab::{models::Repository as GitHubRepository, Octocrab, Page};
@@ -230,15 +233,58 @@ impl App<'_> {
         let workspace_home = env::var("WORKSPACE_HOME")?;
         let path = local_repository_path(workspace_home, repo_id);
         println!("Cloning repository to {}.", path.display());
-        let repo = GitRepository::clone(&ssh_url, path)?;
+        let repo = RepoBuilder::new()
+            .fetch_options(create_fetch_options())
+            .clone(&ssh_url, &path)
+            .context("Failed to clone repository.")?;
 
         if let Some(upstream_url) = upstream_url {
             println!("Adding a remote for `upstream` at `{}`.", upstream_url);
-            repo.remote("upstream", &upstream_url)?;
+            let mut remote =
+                repo.remote("upstream", &upstream_url).context("Failed to add upstream remote.")?;
+            println!("Fetching upstream.");
+            let mut options = {
+                let mut opts = create_fetch_options();
+                opts.prune(git2::FetchPrune::On);
+                opts
+            };
+            remote
+                .fetch(&["refs/*"], Some(&mut options), None)
+                .context("Failed to fetch upstream.")?;
         }
 
         Ok(())
     }
+}
+
+fn create_fetch_options<'a>() -> FetchOptions<'a> {
+    let callbacks = {
+        let mut cbs = RemoteCallbacks::new();
+        cbs.credentials(|url, username_from_url, credential_type| {
+            println!("Requesting credential with type `{:?}` for `{}`.", credential_type, url);
+            let username = username_from_url.unwrap_or("git");
+            if credential_type == CredentialType::USERNAME {
+                println!("Providing credential, username `{}`.", username);
+                return Cred::username(username);
+            }
+            let private_key: PathBuf = format!("{}/.ssh/id_rsa", env::var("HOME").unwrap()).into();
+            let password =
+                dialoguer::Password::new().with_prompt("SSH key passphrase").interact().unwrap();
+            println!(
+                "Providing credential, username `{}`, private key at `{}`.",
+                username,
+                private_key.display()
+            );
+            Cred::ssh_key(username, None, &private_key, password.as_str().into())
+        });
+        cbs
+    };
+    let options = {
+        let mut opts = FetchOptions::new();
+        opts.remote_callbacks(callbacks);
+        opts
+    };
+    options
 }
 
 fn ellipsize(text: &str, threshold: usize) -> Cow<'_, str> {
