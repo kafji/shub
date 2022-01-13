@@ -23,16 +23,6 @@ pub struct Repository {
 }
 
 #[derive(Deserialize, PartialEq, Clone, Debug)]
-pub struct StarredRepository {
-    pub id: i32,
-    pub name: String,
-    pub full_name: String,
-    pub html_url: String,
-    pub description: Option<String>,
-    pub language: Option<String>,
-}
-
-#[derive(Deserialize, PartialEq, Clone, Debug)]
 pub struct MyRepository {
     pub id: i32,
     pub name: String,

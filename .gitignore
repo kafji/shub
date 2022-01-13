@@ -1,4 +1,3 @@
 /target
-.env
 /.vscode
-gh-repo-settings.toml
+/.env

@@ -1,7 +1,5 @@
 # https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions
 
-name: Build
-
 on:
   push:
   pull_request:
