@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Error, Result};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
-use dialoguer::{Confirm, Password};
+use dialoguer::Confirm;
 use futures::{future, stream::TryStreamExt, Stream, StreamExt};
 use git2::{
     build::RepoBuilder, Branch, Cred, CredentialType, FetchOptions, IndexAddOption, PushOptions,
