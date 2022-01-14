@@ -482,6 +482,7 @@ const REPO_DESC_LEN: u8 = 40;
 const OWNER_NAME_LEN: u8 = 15;
 const COMMIT_MSG_LEN: u8 = 40;
 const LANG_NAME_LEN: u8 = 10;
+const PUSHED_AT_LEN: u8 = 10;
 
 #[derive(PartialEq, Clone, Debug)]
 struct StarredRepository(GitHubRepository);
@@ -499,8 +500,29 @@ impl fmt::Display for StarredRepository {
         let owner = repo.owner.as_ref().map(|x| x.login.as_str()).unwrap_or_default();
         write_col!(, f, OWNER_NAME_LEN, owner)?;
 
+        let pushed = repo
+            .pushed_at
+            .as_ref()
+            .map(|x| x.relative_from_now())
+            .map(|x| Cow::Owned(x))
+            .unwrap_or_default();
+        write_col!(, f, PUSHED_AT_LEN, &pushed)?;
+
+        let issues_count = repo.open_issues_count.unwrap_or_default();
+        write_col!(, f, 5, &issues_count.to_string())?;
+
         let lang = repo.language.as_ref().map(|x| x.as_str()).flatten().unwrap_or_default();
         write_col!(, f, LANG_NAME_LEN, lang)?;
+
+        let mut meta = Vec::new();
+        if let Some(true) = repo.archived {
+            meta.push("archived");
+        }
+        if let Some(true) = repo.fork {
+            meta.push("fork");
+        }
+        let meta = meta.into_iter().map(|x| ellipsize(x, 10)).collect::<Vec<_>>().join(", ");
+        write_col!(, f, 15, &meta)?;
 
         Ok(())
     }
@@ -530,7 +552,7 @@ impl fmt::Display for OwnedRepository {
             .map(|x| x.relative_from_now())
             .map(|x| Cow::Owned(x))
             .unwrap_or_default();
-        write_col!(, f, 10, &pushed)?;
+        write_col!(, f, PUSHED_AT_LEN, &pushed)?;
 
         let last_commit = commit
             .as_ref()
