@@ -2,14 +2,14 @@ use clap::{Parser, Subcommand};
 use shub::{PartialRepositoryId, RepositoryId};
 use std::{convert::Infallible, str::FromStr};
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[clap(author, version, about)]
 pub struct Cli {
     #[clap(subcommand)]
     pub cmd: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Repository related operations.
     Repo {
@@ -26,7 +26,7 @@ pub enum Commands {
 pub mod repo {
     use super::*;
 
-    #[derive(Subcommand)]
+    #[derive(Subcommand, Debug)]
     pub enum Commands {
         /// List owned repositories.
         Ls {},
@@ -59,7 +59,7 @@ pub mod repo {
     pub mod settings {
         use super::*;
 
-        #[derive(Subcommand)]
+        #[derive(Subcommand, Debug)]
         pub enum Commands {
             /// Print repository settings.
             Get {
@@ -82,7 +82,7 @@ pub mod repo {
 pub mod star {
     use super::*;
 
-    #[derive(Subcommand)]
+    #[derive(Subcommand, Debug)]
     pub enum Commands {
         /// List starred repositories.
         Ls {},

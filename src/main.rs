@@ -47,15 +47,19 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_thread_ids(true)
+        .init();
 
     let cmd = cmd();
 
-    // create app
     let username = env::var("SHUB_USERNAME")?;
     let token = env::var("SHUB_TOKEN")?;
 
-    let app = App { username: &username };
+    debug!(?username, ?cmd, "Starting.");
+
+    let app = App::new(&username, &token)?;
 
     match cmd.cmd {
         Commands::Repo { cmd } => match cmd {
@@ -77,6 +81,6 @@ async fn main() -> Result<(), Error> {
         },
     };
 
-    debug!("exiting");
+    debug!("Exit.");
     Ok(())
 }

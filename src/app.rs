@@ -37,10 +37,16 @@ const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), concat!("/", env!("CARG
 
 #[derive(Debug)]
 pub struct App<'a> {
-    pub username: &'a str,
+    username: &'a str,
+    token: &'a str,
 }
 
-impl App<'_> {
+impl<'a> App<'a> {
+    pub fn new(username: &'a str, token: &'a str) -> Result<Self, Error> {
+        let s = Self { username, token };
+        Ok(s)
+    }
+
     pub async fn get_repository_settings(&self, repo_id: PartialRepositoryId) -> Result<(), Error> {
         let RepositoryId { owner, name } = repo_id.complete(self.username);
 
@@ -179,7 +185,7 @@ impl App<'_> {
                     .current()
                     .list_repos_for_authenticated_user()
                     .type_("owner")
-                    .sort("updated")
+                    .sort("pushed")
                     .per_page(100);
                 let b = match page_num {
                     Some(x) => b.page(x),
@@ -476,13 +482,13 @@ impl fmt::Display for OwnedRepository {
         let desc = repo.description.as_ref().map(|x| x.as_str()).unwrap_or_default();
         write_col!(, f, 60, desc)?;
 
-        let updated = repo
+        let pushed = repo
             .pushed_at
             .as_ref()
             .map(|x| x.relative_from_now())
             .map(|x| Cow::Owned(x))
             .unwrap_or_default();
-        write_col!(, f, 15, &updated)?;
+        write_col!(, f, 15, &pushed)?;
 
         let lang = repo.language.as_ref().map(|x| x.as_str()).flatten().unwrap_or_default();
         write_col!(, f, 10, lang)?;
