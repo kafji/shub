@@ -3,11 +3,11 @@ use anyhow::{bail, Context, Error, Result};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
-use dialoguer::Confirm;
+use dialoguer::{Confirm, Password};
 use futures::{future, stream::TryStreamExt, Stream, StreamExt};
 use git2::{
-    build::RepoBuilder, Cred, CredentialType, FetchOptions, RemoteCallbacks,
-    Repository as GitRepository,
+    build::RepoBuilder, Branch, Cred, CredentialType, FetchOptions, IndexAddOption, PushOptions,
+    RemoteCallbacks, Repository as GitRepository,
 };
 use http::{header::HeaderName, StatusCode};
 use indoc::formatdoc;
@@ -271,36 +271,106 @@ impl<'a> App<'a> {
 
         Ok(())
     }
+
+    pub async fn git_dump(&self, yes: bool) -> Result<(), Error> {
+        // self.git_maintenance().await?;
+
+        let repo = GitRepository::discover("./")?;
+
+        let head = repo.head()?;
+        if !head.is_branch() {
+            bail!("HEAD is not a branch.")
+        }
+        let local_branch = Branch::wrap(head);
+        let local_branch_name = match local_branch.name()? {
+            Some(name) => {
+                if name != "master" {
+                    bail!("Can only dump `master` branch.")
+                }
+                name
+            }
+            None => bail!("Branch name is not a valid utf-8."),
+        };
+        let mut remote = repo.find_remote("origin")?;
+
+        if !yes {
+            if !Confirm::new()
+                .with_prompt("Are you sure?")
+                .default(false)
+                .show_default(true)
+                .wait_for_newline(true)
+                .interact()?
+            {
+                return Ok(());
+            }
+        }
+
+        let mut index = repo.index()?;
+        index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None);
+        index.write()?;
+
+        let signature = repo.signature()?;
+        let tree = repo.find_tree(index.write_tree()?)?;
+        let parent = repo.head()?.peel_to_commit()?;
+        repo.commit("HEAD".into(), &signature, &signature, "dump", &tree, &[&parent])?;
+
+        let refspecs = vec!["refs/heads/master:refs/heads/master"];
+        let mut opts = create_push_options();
+        remote.push(&refspecs, (&mut opts).into())?;
+
+        Ok(())
+    }
+
+    async fn git_maintenance(&self) -> Result<(), Error> {
+        let repo = GitRepository::discover("./")?;
+
+        let mut remote = repo.find_remote("origin")?;
+
+        let refspecs = remote.refspecs().map(|x| x.str().unwrap().to_owned()).collect::<Vec<_>>();
+        let mut opts = create_fetch_options();
+        remote.fetch(&refspecs, (&mut opts).into(), None);
+
+        Ok(())
+    }
 }
 
 fn create_fetch_options<'a>() -> FetchOptions<'a> {
-    let callbacks = {
-        let mut cbs = RemoteCallbacks::new();
-        cbs.credentials(|url, username_from_url, credential_type| {
-            println!("Requesting credential with type `{:?}` for `{}`.", credential_type, url);
-            let username = username_from_url.unwrap_or("git");
-            if credential_type == CredentialType::USERNAME {
-                println!("Providing credential, username `{}`.", username);
-                return Cred::username(username);
-            }
-            let private_key: PathBuf = format!("{}/.ssh/id_rsa", env::var("HOME").unwrap()).into();
-            let password =
-                dialoguer::Password::new().with_prompt("SSH key passphrase").interact().unwrap();
-            println!(
-                "Providing credential, username `{}`, private key at `{}`.",
-                username,
-                private_key.display()
-            );
-            Cred::ssh_key(username, None, &private_key, password.as_str().into())
-        });
-        cbs
-    };
     let options = {
         let mut opts = FetchOptions::new();
-        opts.remote_callbacks(callbacks);
+        opts.remote_callbacks(create_remote_callbacks());
         opts
     };
     options
+}
+
+fn create_push_options<'a>() -> PushOptions<'a> {
+    let options = {
+        let mut opts = PushOptions::new();
+        opts.remote_callbacks(create_remote_callbacks());
+        opts
+    };
+    options
+}
+
+fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
+    let mut cbs = RemoteCallbacks::new();
+    cbs.credentials(|url, username_from_url, credential_type| {
+        println!("Requesting credential with type `{:?}` for `{}`.", credential_type, url);
+        let username = username_from_url.unwrap_or("git");
+        if credential_type == CredentialType::USERNAME {
+            println!("Providing credential, username `{}`.", username);
+            return Cred::username(username);
+        }
+        let private_key: PathBuf = format!("{}/.ssh/id_rsa", env::var("HOME").unwrap()).into();
+        let password = Password::new().with_prompt("SSH key passphrase").interact().unwrap();
+        println!(
+            "Providing credential, username `{}`, private key at `{}`.",
+            username,
+            private_key.display()
+        );
+        Cred::ssh_key(username, None, &private_key, password.as_str().into())
+    });
+    cbs
 }
 
 fn ellipsize(text: &str, threshold: usize) -> Cow<'_, str> {

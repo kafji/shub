@@ -21,6 +21,11 @@ pub enum Commands {
         #[clap(subcommand)]
         cmd: self::star::Commands,
     },
+    /// Git operations.
+    Git {
+        #[clap(subcommand)]
+        cmd: self::zxc::Commands,
+    },
 }
 
 pub mod repo {
@@ -86,6 +91,20 @@ pub mod star {
     pub enum Commands {
         /// List starred repositories.
         Ls {},
+    }
+}
+
+pub mod zxc {
+    use super::*;
+
+    #[derive(Subcommand, Debug)]
+    pub enum Commands {
+        /// `git commit -am "dump" && git push origin`
+        Dump {
+            /// Answer yes to prompt
+            #[clap(short, long)]
+            yes: bool,
+        },
     }
 }
 

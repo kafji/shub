@@ -2,10 +2,8 @@ mod cli;
 
 use crate::cli::*;
 use anyhow::{Error, Result};
-use futures::{future, TryStreamExt};
-use futures::{stream, StreamExt};
-use shub::app::App;
-use shub::PartialRepositoryId;
+use futures::{future, stream, StreamExt, TryStreamExt};
+use shub::{app::App, PartialRepositoryId};
 use std::{env, sync::Arc};
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
@@ -78,6 +76,9 @@ async fn main() -> Result<(), Error> {
         },
         Commands::Star { cmd } => match cmd {
             star::Commands::Ls {} => app.list_starred_repositories().await?,
+        },
+        Commands::Git { cmd } => match cmd {
+            zxc::Commands::Dump { yes } => app.git_dump(yes).await?,
         },
     };
 
