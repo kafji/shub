@@ -860,7 +860,7 @@ dependencies = [
 [[package]]
 name = "octocrab"
 version = "0.15.3"
-source = "git+https://github.com/kafji/octocrab?branch=kfj/patched#2e87e25c280a900a2a841ed88a368ed2706e39dc"
+source = "git+https://github.com/kafji/octocrab?branch=kfj/patched#305548c84e2b1f20f9e8dfc1140c5ee6cc188fbe"
 dependencies = [
  "arc-swap",
  "async-trait",

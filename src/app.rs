@@ -1,4 +1,4 @@
-use crate::{PartialRepositoryId, RepositoryId};
+use crate::{GetRepositoryId, PartialRepositoryId, RepositoryId};
 use anyhow::{bail, Context, Error, Result};
 use async_stream::try_stream;
 use async_trait::async_trait;
@@ -11,7 +11,10 @@ use git2::{
 };
 use http::{header::HeaderName, StatusCode};
 use indoc::formatdoc;
-use octocrab::{models::Repository as GitHubRepository, Octocrab, Page};
+use octocrab::{
+    models::{repos::Commit as GitHubCommit, Repository as GitHubRepository},
+    Octocrab, Page,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -126,9 +129,9 @@ impl<'a> App<'a> {
         });
         repos
             .map_ok(StarredRepository)
-            .try_for_each(|repo| async move {
+            .try_for_each(|repo| {
                 println!("{}", repo);
-                Ok(())
+                future::ok(())
             })
             .await?;
         Ok(())
@@ -197,10 +200,17 @@ impl<'a> App<'a> {
             Ok(repos)
         });
         repos
-            .map_ok(OwnedRepository)
-            .try_for_each(|repo| async move {
+            .and_then(|repo| async {
+                let repo_id = repo.get_repository_id()?;
+                let client = create_client()?;
+                let commits =
+                    client.repos(repo_id.owner, repo_id.name).commits().per_page(1).send().await?;
+                let commit = commits.items.first().map(ToOwned::to_owned);
+                Ok(OwnedRepository(repo, commit))
+            })
+            .try_for_each(|repo| {
                 println!("{}", repo);
-                Ok(())
+                future::ok(())
             })
             .await?;
         Ok(())
@@ -294,13 +304,14 @@ fn create_fetch_options<'a>() -> FetchOptions<'a> {
 }
 
 fn ellipsize(text: &str, threshold: usize) -> Cow<'_, str> {
-    debug_assert!(threshold > 3);
+    debug_assert!(threshold > 2);
     if text.len() <= threshold {
         text.into()
     } else {
-        let text = text.chars().take(threshold - 3);
-        let s: String = text.chain("...".chars()).collect();
-        s.into()
+        let text: String =
+            text.chars().map(|c| if c == '\n' { ' ' } else { c }).take(threshold - 2).collect();
+        let text: String = text.trim().chars().chain("..".chars()).collect();
+        text.into()
     }
 }
 
@@ -439,8 +450,11 @@ where
     }
 }
 
-const REPO_NAME_LEN: u8 = 30;
-const OWNER_NAME_LEN: u8 = 20;
+const REPO_NAME_LEN: u8 = 15;
+const REPO_DESC_LEN: u8 = 40;
+const OWNER_NAME_LEN: u8 = 15;
+const COMMIT_MSG_LEN: u8 = 40;
+const LANG_NAME_LEN: u8 = 10;
 
 #[derive(PartialEq, Clone, Debug)]
 struct StarredRepository(GitHubRepository);
@@ -453,34 +467,35 @@ impl fmt::Display for StarredRepository {
         write_col!(f, REPO_NAME_LEN, name)?;
 
         let desc = repo.description.as_ref().map(|x| x.as_str()).unwrap_or_default();
-        write_col!(, f, 60, desc)?;
+        write_col!(, f, REPO_DESC_LEN, desc)?;
 
         let owner = repo.owner.as_ref().map(|x| x.login.as_str()).unwrap_or_default();
         write_col!(, f, OWNER_NAME_LEN, owner)?;
 
         let lang = repo.language.as_ref().map(|x| x.as_str()).flatten().unwrap_or_default();
-        write_col!(, f, 10, lang)?;
+        write_col!(, f, LANG_NAME_LEN, lang)?;
 
         Ok(())
     }
 }
 
 #[derive(PartialEq, Clone, Debug)]
-struct OwnedRepository(GitHubRepository);
+struct OwnedRepository(GitHubRepository, Option<GitHubCommit>);
 
 impl fmt::Display for OwnedRepository {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let repo = &self.0;
+        let commit = &self.1;
 
         let visibility =
             repo.private.map(|x| if x { "private" } else { "public" }).unwrap_or_default();
-        write_col!(f, 7, visibility)?;
+        write_col!(f, 6, visibility)?;
 
         let name = &repo.name;
         write_col!(, f, REPO_NAME_LEN, name)?;
 
         let desc = repo.description.as_ref().map(|x| x.as_str()).unwrap_or_default();
-        write_col!(, f, 60, desc)?;
+        write_col!(, f, REPO_DESC_LEN, desc)?;
 
         let pushed = repo
             .pushed_at
@@ -488,13 +503,28 @@ impl fmt::Display for OwnedRepository {
             .map(|x| x.relative_from_now())
             .map(|x| Cow::Owned(x))
             .unwrap_or_default();
-        write_col!(, f, 15, &pushed)?;
+        write_col!(, f, 10, &pushed)?;
+
+        let last_commit = commit
+            .as_ref()
+            .map(|x| x.commit.as_ref())
+            .flatten()
+            .map(|x| x.message.as_str())
+            .unwrap_or_default();
+        write_col!(, f, COMMIT_MSG_LEN, last_commit)?;
 
         let lang = repo.language.as_ref().map(|x| x.as_str()).flatten().unwrap_or_default();
-        write_col!(, f, 10, lang)?;
+        write_col!(, f, LANG_NAME_LEN, lang)?;
 
-        let archived = repo.archived.map(|x| if x { "archived" } else { "" }).unwrap_or_default();
-        write_col!(, f, 8, archived)?;
+        let mut meta = Vec::new();
+        if let Some(true) = repo.archived {
+            meta.push("archived");
+        }
+        if let Some(true) = repo.fork {
+            meta.push("fork");
+        }
+        let meta = meta.into_iter().map(|x| ellipsize(x, 10)).collect::<Vec<_>>().join(", ");
+        write_col!(, f, 15, &meta)?;
 
         Ok(())
     }

@@ -1,7 +1,22 @@
 pub mod app;
 
 use anyhow::{bail, Error};
+use core::fmt;
+use octocrab::models::Repository;
 use std::str::FromStr;
+
+trait GetRepositoryId {
+    fn get_repository_id(&self) -> Result<RepositoryId, Error>;
+}
+
+impl GetRepositoryId for Repository {
+    fn get_repository_id(&self) -> Result<RepositoryId, Error> {
+        let owner = self.owner.as_ref().unwrap().login.clone();
+        let name = self.name.clone();
+        let id = RepositoryId::new(owner, name);
+        Ok(id)
+    }
+}
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct RepositoryId {
@@ -21,6 +36,12 @@ impl RepositoryId {
         default_owner: String,
     ) -> Self {
         Self { owner: owner.unwrap_or(default_owner), name }
+    }
+}
+
+impl fmt::Display for RepositoryId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.owner, self.name)
     }
 }
 
@@ -45,6 +66,12 @@ impl FromStr for RepositoryId {
         };
         Ok(r)
     }
+}
+
+#[cfg(test)]
+#[test]
+fn test_repository_id_display() {
+    assert_eq!(RepositoryId::new("kafji", "shub").to_string(), "kafji/shub");
 }
 
 #[cfg(test)]
