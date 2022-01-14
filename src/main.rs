@@ -3,45 +3,13 @@ mod cli;
 use crate::cli::*;
 use anyhow::{Error, Result};
 use futures::{future, stream, StreamExt, TryStreamExt};
-use shub::{app::App, PartialRepositoryId};
-use std::{env, sync::Arc};
+use shub::{
+    app::{App, AppConfig},
+    PartialRepositoryId,
+};
+use std::{env, path::PathBuf, sync::Arc};
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
-
-// async fn download_settings(
-//     app: App<'_>,
-//     DownloadSettings { repository, file }: DownloadSettings,
-// ) -> Result<()> {
-//     let Repository { owner, name } = repository;
-//     app.download_settings(owner.as_ref().map(String::as_str), &name, file.as_path()).await?;
-//     Ok(())
-// }
-
-// async fn apply_settings<'a>(
-//     app: App<'a>,
-//     ApplySettings { file, repository, repositories }: ApplySettings,
-// ) -> Result<()> {
-//     let app = Arc::new(app);
-//     let file = file.as_path();
-//     stream::once(future::ready(repository))
-//         .chain(stream::iter(repositories))
-//         .map(Result::<_, anyhow::Error>::Ok)
-//         .try_for_each_concurrent(
-//             None,
-//             (|app: Arc<App<'a>>| {
-//                 move |Repository { owner, name }| {
-//                     let app = app.clone();
-//                     async move {
-//                         let owner = owner.as_ref().map(String::as_str);
-//                         app.apply_settings(owner, &name, file).await?;
-//                         Ok(())
-//                     }
-//                 }
-//             })(app.clone()),
-//         )
-//         .await?;
-//     Ok(())
-// }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -53,11 +21,18 @@ async fn main() -> Result<(), Error> {
     let cmd = cmd();
 
     let username = env::var("SHUB_USERNAME")?;
-    let token = env::var("SHUB_TOKEN")?;
+    let github_token = env::var("SHUB_TOKEN")?;
+    let workspace_root_dir: PathBuf = env::var("WORKSPACE_HOME")?.into();
 
-    debug!(?username, ?cmd, "Starting.");
+    let cfg = AppConfig {
+        username: &username,
+        github_token: &github_token,
+        workspace_root_dir: &workspace_root_dir,
+    };
 
-    let app = App::new(&username, &token)?;
+    debug!(?cfg, ?cmd, "Starting.");
+
+    let app = App::new(cfg)?;
 
     match cmd.cmd {
         Commands::Repo { cmd } => match cmd {

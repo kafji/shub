@@ -1,4 +1,4 @@
-use crate::{GetRepositoryId, PartialRepositoryId, RepositoryId};
+use crate::{GetRepositoryId, PartialRepositoryId, RepositoryId, Secret};
 use anyhow::{bail, Context, Error, Result};
 use async_stream::try_stream;
 use async_trait::async_trait;
@@ -38,15 +38,26 @@ macro_rules! write_col {
 
 const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), concat!("/", env!("CARGO_PKG_VERSION")));
 
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub struct AppConfig<'a> {
+    pub username: &'a str,
+    pub github_token: &'a str,
+    pub workspace_root_dir: &'a Path,
+}
+
 #[derive(Debug)]
 pub struct App<'a> {
     username: &'a str,
-    token: &'a str,
+    github_token: Secret<&'a str>,
+    workspace_root_dir: &'a Path,
 }
 
 impl<'a> App<'a> {
-    pub fn new(username: &'a str, token: &'a str) -> Result<Self, Error> {
-        let s = Self { username, token };
+    pub fn new(
+        AppConfig { username, github_token, workspace_root_dir }: AppConfig<'a>,
+    ) -> Result<Self, Error> {
+        let github_token = github_token.into();
+        let s = Self { username, github_token, workspace_root_dir };
         Ok(s)
     }
 

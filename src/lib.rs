@@ -156,3 +156,36 @@ fn test_parse_partial_repository_id() {
         "kafji/sh/ub".parse().unwrap()
     );
 }
+
+#[derive(Clone)]
+struct Secret<T>(pub T);
+
+impl<T> From<T> for Secret<T> {
+    fn from(s: T) -> Self {
+        Self(s)
+    }
+}
+
+impl<T> fmt::Debug for Secret<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Secret").field(&"█████").finish()
+    }
+}
+
+impl<T> fmt::Display for Secret<T>
+where
+    T: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "█████")
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn test_print_secret() {
+    let secret = Secret("sekret");
+    assert!(!format!("{secret}").contains("sekret"));
+    assert!(!format!("{secret:?}").contains("sekret"));
+    assert!(!format!("{secret:#?}").contains("sekret"));
+}
