@@ -255,10 +255,8 @@ impl<'a> App<'a> {
             .context("Failed to clone repository.")?;
 
         if let Some(upstream_url) = upstream_url {
-            println!("Adding remote for `upstream` at `{}`.", upstream_url);
             let mut remote =
                 repo.remote("upstream", &upstream_url).context("Failed to add upstream remote.")?;
-            println!("Fetching `upstream`.");
             let mut options = {
                 let mut opts = create_fetch_options();
                 opts.prune(git2::FetchPrune::On);
