@@ -95,10 +95,10 @@ impl<'a> App<'a> {
             }
         };
 
-        // Get repository settings.
         let old_settings = get_settings(to.clone()).await?;
         let new_settings = get_settings(from.clone()).await?;
         let diff = RepositorySettingsDiff::new(&old_settings, &new_settings);
+
         println!("{}", diff);
 
         if !Confirm::new()
@@ -112,10 +112,11 @@ impl<'a> App<'a> {
         }
 
         // Apply settings.
-        let RepositoryId { owner, name } = to;
-        client
-            .patch(format!("repos/{owner}/{name}", owner = owner, name = name), Some(&new_settings))
-            .await?;
+
+        let _: GitHubRepository = {
+            let RepositoryId { owner, name } = to;
+            client.patch(format!("repos/{owner}/{name}"), Some(&new_settings)).await?
+        };
 
         Ok(())
     }
@@ -276,7 +277,7 @@ impl<'a> App<'a> {
         Ok(())
     }
 
-    pub async fn git_dump(&self) -> Result<(), Error> {
+    pub async fn dump_changes(&self) -> Result<(), Error> {
         let repo = GitRepository::discover("./")?;
 
         let head = repo.head()?;
@@ -302,8 +303,8 @@ impl<'a> App<'a> {
         // Commit.
         let signature = repo.signature()?;
         let tree = repo.find_tree(index.write_tree()?)?;
-        let parent = repo.head()?.peel_to_commit()?;
-        repo.commit("HEAD".into(), &signature, &signature, "dump", &tree, &[&parent])?;
+        let parent = local_branch.into_reference().peel_to_commit()?;
+        repo.commit("HEAD".into(), &signature, &signature, "dump (Shub)", &tree, &[&parent])?;
 
         // Push.
         let refspecs = vec!["refs/heads/master:refs/heads/master"];

@@ -15,15 +15,20 @@ pub enum Commands {
         #[clap(subcommand)]
         cmd: self::repo::Commands,
     },
-    /// Star related operations.
-    Star {
+    /// Stars related operations.
+    Stars {
         #[clap(subcommand)]
-        cmd: self::star::Commands,
+        cmd: self::stars::Commands,
     },
     /// Git operations.
     Git {
         #[clap(subcommand)]
-        cmd: self::zxc::Commands,
+        cmd: self::git::Commands,
+    },
+    /// Workspace operations.
+    Ws {
+        #[clap(subcommand)]
+        cmd: self::ws::Commands,
     },
 }
 
@@ -34,7 +39,7 @@ pub mod repo {
     pub enum Commands {
         /// List owned repositories.
         Ls {},
-        /// Open a repository.
+        /// Open repository.
         Open {
             /// Repository identifier.
             repo: PartialRepositoryId,
@@ -48,7 +53,7 @@ pub mod repo {
             #[clap(subcommand)]
             cmd: self::settings::Commands,
         },
-        /// Fork a repository.
+        /// Fork repository.
         Fork {
             /// Repository identifier.
             repo: RepositoryId,
@@ -83,7 +88,7 @@ pub mod repo {
     }
 }
 
-pub mod star {
+pub mod stars {
     use super::*;
 
     #[derive(Subcommand, Debug)]
@@ -99,13 +104,22 @@ pub mod star {
     }
 }
 
-pub mod zxc {
+pub mod git {
     use super::*;
 
     #[derive(Subcommand, Debug)]
     pub enum Commands {
         /// `git commit -am "dump" && git push origin`
         Dump {},
+    }
+}
+
+pub mod ws {
+    use super::*;
+
+    #[derive(Subcommand, Debug)]
+    pub enum Commands {
+        Ls { namespace: String },
     }
 }
 

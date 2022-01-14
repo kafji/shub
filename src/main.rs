@@ -48,14 +48,15 @@ async fn main() -> Result<(), Error> {
             repo::Commands::Fork { repo } => app.fork_repository(repo).await?,
             repo::Commands::Clone { repo } => app.clone_repository(repo).await?,
         },
-        Commands::Star { cmd } => match cmd {
-            star::Commands::Ls {} => app.list_starred_repositories().await?,
-            star::Commands::Star { repo } => todo!(),
-            star::Commands::Unstar { repo } => todo!(),
+        Commands::Stars { cmd } => match cmd {
+            stars::Commands::Ls {} => app.list_starred_repositories().await?,
+            stars::Commands::Star { repo } => todo!(),
+            stars::Commands::Unstar { repo } => todo!(),
         },
         Commands::Git { cmd } => match cmd {
-            zxc::Commands::Dump {} => app.git_dump().await?,
+            git::Commands::Dump {} => app.dump_changes().await?,
         },
+        Commands::Ws { cmd } => todo!(),
     };
 
     debug!("Exit.");
