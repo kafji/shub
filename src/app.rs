@@ -305,15 +305,18 @@ impl<'a> App<'a> {
             }
         }
 
+        // Add.
         let mut index = repo.index()?;
         index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None);
         index.write()?;
 
+        // Commit.
         let signature = repo.signature()?;
         let tree = repo.find_tree(index.write_tree()?)?;
         let parent = repo.head()?.peel_to_commit()?;
         repo.commit("HEAD".into(), &signature, &signature, "dump", &tree, &[&parent])?;
 
+        // Push.
         let refspecs = vec!["refs/heads/master:refs/heads/master"];
         let mut opts = create_push_options();
         remote.push(&refspecs, (&mut opts).into())?;
@@ -355,19 +358,9 @@ fn create_push_options<'a>() -> PushOptions<'a> {
 fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
     let mut cbs = RemoteCallbacks::new();
     cbs.credentials(|url, username_from_url, credential_type| {
-        println!("Requesting credential with type `{:?}` for `{}`.", credential_type, url);
         let username = username_from_url.unwrap_or("git");
-        if credential_type == CredentialType::USERNAME {
-            println!("Providing credential, username `{}`.", username);
-            return Cred::username(username);
-        }
         let private_key: PathBuf = format!("{}/.ssh/id_rsa", env::var("HOME").unwrap()).into();
         let password = Password::new().with_prompt("SSH key passphrase").interact().unwrap();
-        println!(
-            "Providing credential, username `{}`, private key at `{}`.",
-            username,
-            private_key.display()
-        );
         Cred::ssh_key(username, None, &private_key, password.as_str().into())
     });
     cbs
