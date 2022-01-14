@@ -66,7 +66,7 @@ pub mod repo {
         #[derive(Subcommand, Debug)]
         pub enum Commands {
             /// Print repository settings.
-            Get {
+            View {
                 /// Repository identifier.
                 repo: PartialRepositoryId,
             },
@@ -90,6 +90,12 @@ pub mod star {
     pub enum Commands {
         /// List starred repositories.
         Ls {},
+
+        /// Star an unstarred repository.
+        Star { repo: RepositoryId },
+
+        /// Unstar a starred repository.
+        Unstar { repo: RepositoryId },
     }
 }
 

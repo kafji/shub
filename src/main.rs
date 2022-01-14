@@ -36,11 +36,11 @@ async fn main() -> Result<(), Error> {
     match cmd.cmd {
         Commands::Repo { cmd } => match cmd {
             repo::Commands::Ls {} => app.list_owned_repositories().await?,
-            repo::Commands::Open { repo: PartialRepositoryId { owner, name }, upstream } => {
-                app.open_repository(owner.as_ref().map(|x| x.as_str()), &name, upstream).await?
-            }
+            repo::Commands::Open { repo, upstream } => app.open_repository(repo, upstream).await?,
             repo::Commands::Settings { cmd } => match cmd {
-                repo::settings::Commands::Get { repo } => app.get_repository_settings(repo).await?,
+                repo::settings::Commands::View { repo } => {
+                    app.view_repository_settings(repo).await?
+                }
                 repo::settings::Commands::Apply { from, to } => {
                     app.apply_repository_settings(from, to).await?
                 }
@@ -50,6 +50,8 @@ async fn main() -> Result<(), Error> {
         },
         Commands::Star { cmd } => match cmd {
             star::Commands::Ls {} => app.list_starred_repositories().await?,
+            star::Commands::Star { repo } => todo!(),
+            star::Commands::Unstar { repo } => todo!(),
         },
         Commands::Git { cmd } => match cmd {
             zxc::Commands::Dump {} => app.git_dump().await?,

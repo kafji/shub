@@ -58,14 +58,17 @@ impl<'a> App<'a> {
         Ok(s)
     }
 
-    pub async fn get_repository_settings(&self, repo_id: PartialRepositoryId) -> Result<(), Error> {
+    pub async fn view_repository_settings(
+        &self,
+        repo_id: PartialRepositoryId,
+    ) -> Result<(), Error> {
         let RepositoryId { owner, name } = repo_id.complete(self.username);
 
         let client = create_client()?;
         let repo = client.repos(owner, name).get().await?;
         let settings = repo.extract_repository_settings()?;
 
-        println!("{:#?}", settings);
+        println!("{}", settings);
 
         Ok(())
     }
@@ -95,8 +98,8 @@ impl<'a> App<'a> {
         // Get repository settings.
         let old_settings = get_settings(to.clone()).await?;
         let new_settings = get_settings(from.clone()).await?;
-
-        println!("{:#?}", new_settings);
+        let diff = RepositorySettingsDiff::new(&old_settings, &new_settings);
+        println!("{}", diff);
 
         if !Confirm::new()
             .with_prompt("Apply settings?")
@@ -147,14 +150,14 @@ impl<'a> App<'a> {
 
     pub async fn open_repository(
         &self,
-        owner: Option<&str>,
-        name: &str,
+        repo_id: PartialRepositoryId,
         upstream: bool,
     ) -> Result<(), Error> {
-        let owner = owner.unwrap_or(self.username);
+        let RepositoryId { owner, name } = repo_id.complete(self.username);
+
         let client = create_client()?;
 
-        let repo = client.repos(owner, name).get().await;
+        let repo = client.repos(&owner, &name).get().await;
         let repo = match repo {
             Ok(x) => x,
             Err(err) => {
@@ -166,11 +169,6 @@ impl<'a> App<'a> {
                 }
             }
         };
-
-        {
-            let s = repo.extract_repository_settings();
-            println!("{:?}", s);
-        }
 
         let url = if upstream {
             if !repo.fork.unwrap_or_default() {
@@ -390,6 +388,24 @@ struct RepositorySettings {
     allow_merge_commit: bool,
 }
 
+macro_rules! write_key {
+    ($w:expr, $this:expr, $key:ident) => {{
+        let val = $this.$key;
+        write!($w, "{key:>25} = {val:5}\n", key = stringify!($key))
+    }};
+}
+
+impl fmt::Display for RepositorySettings {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write_key!(f, self, allow_rebase_merge)?;
+        write_key!(f, self, allow_squash_merge)?;
+        write_key!(f, self, allow_auto_merge)?;
+        write_key!(f, self, delete_branch_on_merge)?;
+        write_key!(f, self, allow_merge_commit)?;
+        Ok(())
+    }
+}
+
 macro_rules! extract_key {
     ($repo:expr, $key:ident) => {
         $repo.$key.ok_or_else(|| {
@@ -413,20 +429,26 @@ impl ExtractRepositorySettings for GitHubRepository {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-struct RepoSettingsDiff {
-    old: RepositorySettings,
-    new: RepositorySettings,
+struct RepositorySettingsDiff<'a> {
+    old: &'a RepositorySettings,
+    new: &'a RepositorySettings,
+}
+
+impl<'a> RepositorySettingsDiff<'a> {
+    fn new(old: &'a RepositorySettings, new: &'a RepositorySettings) -> Self {
+        Self { old, new }
+    }
 }
 
 macro_rules! diff_key {
     ($w:expr, $this:expr, $key:ident) => {{
         let old = $this.old.$key;
         let new = $this.new.$key;
-        write!($w, "{key} | {old} -> {new}\n", key = stringify!(key), old = old, new = new)
+        write!($w, "{key:>25} = {old:>5} -> {new:<5}\n", key = stringify!($key))
     }};
 }
 
-impl fmt::Display for RepoSettingsDiff {
+impl fmt::Display for RepositorySettingsDiff<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         diff_key!(f, self, allow_rebase_merge)?;
         diff_key!(f, self, allow_squash_merge)?;
