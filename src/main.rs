@@ -2,12 +2,11 @@ mod cli;
 
 use crate::cli::*;
 use anyhow::{Error, Result};
-use futures::{future, stream, StreamExt, TryStreamExt};
 use shub::{
     app::{App, AppConfig},
     PartialRepositoryId,
 };
-use std::{env, path::PathBuf, sync::Arc};
+use std::{env, path::PathBuf};
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
 

@@ -4,12 +4,12 @@ use async_stream::try_stream;
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use dialoguer::Confirm;
-use futures::{future, stream::TryStreamExt, Stream, StreamExt};
+use futures::{future, stream::TryStreamExt, Stream};
 use git2::{
-    build::RepoBuilder, Branch, Cred, CredentialType, FetchOptions, IndexAddOption, PushOptions,
-    RemoteCallbacks, Repository as GitRepository,
+    build::RepoBuilder, Branch, Cred, FetchOptions, IndexAddOption, PushOptions, RemoteCallbacks,
+    Repository as GitRepository,
 };
-use http::{header::HeaderName, StatusCode};
+use http::header::HeaderName;
 use indoc::formatdoc;
 use octocrab::{
     models::{repos::Commit as GitHubCommit, Repository as GitHubRepository},
@@ -20,12 +20,9 @@ use std::{
     borrow::Cow,
     env, fmt,
     future::Future,
-    io::Write,
     path::{Path, PathBuf},
     process::Command,
 };
-use tokio::fs;
-use tracing::debug;
 
 macro_rules! write_col {
     ($w:expr, $len:expr, $txt:expr) => {
@@ -289,12 +286,11 @@ impl<'a> App<'a> {
             bail!("HEAD is not a branch.")
         }
         let local_branch = Branch::wrap(head);
-        let local_branch_name = match local_branch.name()? {
+        match local_branch.name()? {
             Some(name) => {
                 if name != "master" {
                     bail!("Can only dump `master` branch.")
                 }
-                name
             }
             None => bail!("Branch name is not a valid utf-8."),
         };
@@ -302,7 +298,7 @@ impl<'a> App<'a> {
 
         // Add.
         let mut index = repo.index()?;
-        index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None);
+        index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
         index.write()?;
 
         // Commit.
@@ -334,7 +330,7 @@ fn create_push_options<'a>() -> PushOptions<'a> {
 
 fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
     let mut cbs = RemoteCallbacks::new();
-    cbs.credentials(|url, username_from_url, credential_type| {
+    cbs.credentials(|_url, username_from_url, _credential_type| {
         let username = username_from_url.unwrap_or("git");
         Cred::ssh_key_from_agent(username)
     });
@@ -392,14 +388,6 @@ struct RepositorySettings {
     allow_auto_merge: bool,
     delete_branch_on_merge: bool,
     allow_merge_commit: bool,
-}
-
-impl RepositorySettings {
-    async fn read_from(path: &Path) -> Result<Self, Error> {
-        let buf = fs::read(path).await?;
-        let s = toml::from_slice(&buf)?;
-        Ok(s)
-    }
 }
 
 macro_rules! extract_key {

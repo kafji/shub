@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use shub::{PartialRepositoryId, RepositoryId};
-use std::{convert::Infallible, str::FromStr};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
