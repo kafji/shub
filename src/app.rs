@@ -358,10 +358,12 @@ fn create_push_options<'a>() -> PushOptions<'a> {
 fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
     let mut cbs = RemoteCallbacks::new();
     cbs.credentials(|url, username_from_url, credential_type| {
+        // if credential_type == CredentialType::SSH_KEY {}
         let username = username_from_url.unwrap_or("git");
-        let private_key: PathBuf = format!("{}/.ssh/id_rsa", env::var("HOME").unwrap()).into();
-        let password = Password::new().with_prompt("SSH key passphrase").interact().unwrap();
-        Cred::ssh_key(username, None, &private_key, password.as_str().into())
+        // let private_key: PathBuf = format!("{}/.ssh/id_rsa", env::var("HOME").unwrap()).into();
+        // let password = Password::new().with_prompt("SSH key passphrase").interact().unwrap();
+        // Cred::ssh_key(username, None, &private_key, password.as_str().into())
+        Cred::ssh_key_from_agent(username)
     });
     cbs
 }
