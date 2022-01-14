@@ -63,6 +63,11 @@ pub mod repo {
             /// Repository identifier.
             repo: PartialRepositoryId,
         },
+        /// Create repository.
+        Create {
+            /// Repository identifier.
+            repo: PartialRepositoryId,
+        },
     }
 
     pub mod settings {
