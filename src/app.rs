@@ -258,8 +258,8 @@ impl<'a> App<'a> {
         };
 
         let workspace_home = env::var("WORKSPACE_HOME")?;
-        let path = local_repository_path(workspace_home, repo_id);
-        println!("Cloning repository to `{}`.", path.display());
+        let path = local_repository_path(workspace_home, &repo_id);
+        println!("Cloning {repo_id} repository to {path}.", path = path.display());
         let repo = RepoBuilder::new()
             .fetch_options(create_fetch_options())
             .clone(&ssh_url, &path)
@@ -637,14 +637,14 @@ impl fmt::Display for Since {
     }
 }
 
-fn local_repository_path(workspace: impl AsRef<Path>, repo_id: RepositoryId) -> PathBuf {
-    workspace.as_ref().to_path_buf().join(repo_id.owner).join(repo_id.name)
+fn local_repository_path(workspace: impl AsRef<Path>, repo_id: &RepositoryId) -> PathBuf {
+    workspace.as_ref().to_path_buf().join(&repo_id.owner).join(&repo_id.name)
 }
 
 #[cfg(test)]
 #[test]
 fn test_local_repository_path() {
     let workspace = "./workspace";
-    let path = local_repository_path(workspace, RepositoryId::new("kafji", "shub"));
+    let path = local_repository_path(workspace, &RepositoryId::new("kafji", "shub"));
     assert_eq!(path.display().to_string(), "./workspace/kafji/shub");
 }
