@@ -15,6 +15,11 @@ pub enum Commands {
         #[clap(subcommand)]
         cmd: self::repo::Commands,
     },
+    /// Action related operations.
+    Action {
+        #[clap(subcommand)]
+        cmd: self::action::Commands,
+    },
     /// Stars related operations.
     Stars {
         #[clap(subcommand)]
@@ -90,6 +95,19 @@ pub mod repo {
                 to: PartialRepositoryId,
             },
         }
+    }
+}
+
+pub mod action {
+    use super::*;
+
+    #[derive(Subcommand, Debug)]
+    pub enum Commands {
+        /// Print actions status of a repositroy.
+        Status {
+            /// Repository identifier.
+            repo: PartialRepositoryId,
+        },
     }
 }
 
