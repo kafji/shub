@@ -100,11 +100,7 @@ pub mod zxc {
     #[derive(Subcommand, Debug)]
     pub enum Commands {
         /// `git commit -am "dump" && git push origin`
-        Dump {
-            /// Answer yes to prompt
-            #[clap(short, long)]
-            yes: bool,
-        },
+        Dump {},
     }
 }
 

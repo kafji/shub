@@ -248,33 +248,31 @@ impl<'a> App<'a> {
 
         let workspace_home = env::var("WORKSPACE_HOME")?;
         let path = local_repository_path(workspace_home, repo_id);
-        println!("Cloning repository to {}.", path.display());
+        println!("Cloning repository to `{}`.", path.display());
         let repo = RepoBuilder::new()
             .fetch_options(create_fetch_options())
             .clone(&ssh_url, &path)
             .context("Failed to clone repository.")?;
 
         if let Some(upstream_url) = upstream_url {
-            println!("Adding a remote for `upstream` at `{}`.", upstream_url);
+            println!("Adding remote for `upstream` at `{}`.", upstream_url);
             let mut remote =
                 repo.remote("upstream", &upstream_url).context("Failed to add upstream remote.")?;
-            println!("Fetching upstream.");
+            println!("Fetching `upstream`.");
             let mut options = {
                 let mut opts = create_fetch_options();
                 opts.prune(git2::FetchPrune::On);
                 opts
             };
             remote
-                .fetch(&["refs/*"], Some(&mut options), None)
+                .fetch(&["+refs/heads/*:refs/remotes/origin/*"], Some(&mut options), None)
                 .context("Failed to fetch upstream.")?;
         }
 
         Ok(())
     }
 
-    pub async fn git_dump(&self, yes: bool) -> Result<(), Error> {
-        // self.git_maintenance().await?;
-
+    pub async fn git_dump(&self) -> Result<(), Error> {
         let repo = GitRepository::discover("./")?;
 
         let head = repo.head()?;
@@ -293,18 +291,6 @@ impl<'a> App<'a> {
         };
         let mut remote = repo.find_remote("origin")?;
 
-        if !yes {
-            if !Confirm::new()
-                .with_prompt("Are you sure?")
-                .default(false)
-                .show_default(true)
-                .wait_for_newline(true)
-                .interact()?
-            {
-                return Ok(());
-            }
-        }
-
         // Add.
         let mut index = repo.index()?;
         index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None);
@@ -320,18 +306,6 @@ impl<'a> App<'a> {
         let refspecs = vec!["refs/heads/master:refs/heads/master"];
         let mut opts = create_push_options();
         remote.push(&refspecs, (&mut opts).into())?;
-
-        Ok(())
-    }
-
-    async fn git_maintenance(&self) -> Result<(), Error> {
-        let repo = GitRepository::discover("./")?;
-
-        let mut remote = repo.find_remote("origin")?;
-
-        let refspecs = remote.refspecs().map(|x| x.str().unwrap().to_owned()).collect::<Vec<_>>();
-        let mut opts = create_fetch_options();
-        remote.fetch(&refspecs, (&mut opts).into(), None);
 
         Ok(())
     }

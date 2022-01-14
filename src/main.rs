@@ -78,7 +78,7 @@ async fn main() -> Result<(), Error> {
             star::Commands::Ls {} => app.list_starred_repositories().await?,
         },
         Commands::Git { cmd } => match cmd {
-            zxc::Commands::Dump { yes } => app.git_dump(yes).await?,
+            zxc::Commands::Dump {} => app.git_dump().await?,
         },
     };
 
