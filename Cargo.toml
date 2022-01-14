@@ -23,7 +23,7 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 toml = "0.5"
 tracing = "0.1"
-tracing-subscriber = "0.2"
+tracing-subscriber = "0.3"
 octocrab = { git = "https://github.com/kafji/octocrab", branch = "kfj/patched" }
 
 [dev-dependencies]
