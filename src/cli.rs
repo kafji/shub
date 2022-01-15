@@ -42,7 +42,7 @@ pub mod repo {
 
     #[derive(Subcommand, Debug)]
     pub enum Commands {
-        /// List owned repositories.
+        /// Print list of owned repositories.
         Ls {},
         /// Open repository.
         Open {
@@ -116,7 +116,7 @@ pub mod stars {
 
     #[derive(Subcommand, Debug)]
     pub enum Commands {
-        /// List starred repositories.
+        /// Print list of starred repositories.
         Ls {},
 
         /// Star an unstarred repository.
@@ -142,7 +142,11 @@ pub mod ws {
 
     #[derive(Subcommand, Debug)]
     pub enum Commands {
+        /// Print list of projects under specified namespace.
         Ls { namespace: String },
+
+        /// Print list of namespaces.
+        Namespaces {},
     }
 }
 

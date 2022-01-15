@@ -1,9 +1,14 @@
+mod display;
+
 pub mod app;
 
 use anyhow::{bail, Error};
 use core::fmt;
-use octocrab::models::Repository;
-use std::str::FromStr;
+use octocrab::models::{repos::Commit, Repository};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 trait GetRepositoryId {
     fn get_repository_id(&self) -> Result<RepositoryId, Error>;
@@ -189,3 +194,21 @@ fn test_print_secret() {
     assert!(!format!("{secret:?}").contains("sekret"));
     assert!(!format!("{secret:#?}").contains("sekret"));
 }
+
+fn local_repository_path(workspace: impl AsRef<Path>, repo_id: &RepositoryId) -> PathBuf {
+    workspace.as_ref().to_path_buf().join(&repo_id.owner).join(&repo_id.name)
+}
+
+#[cfg(test)]
+#[test]
+fn test_local_repository_path() {
+    let workspace = "./workspace";
+    let path = local_repository_path(workspace, &RepositoryId::new("kafji", "shub"));
+    assert_eq!(path.display().to_string(), "./workspace/kafji/shub");
+}
+
+#[derive(PartialEq, Clone, Debug)]
+struct StarredRepository(Repository);
+
+#[derive(PartialEq, Clone, Debug)]
+struct OwnedRepository(Repository, Option<Commit>);

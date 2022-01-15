@@ -2,10 +2,7 @@ mod cli;
 
 use crate::cli::*;
 use anyhow::{Error, Result};
-use shub::{
-    app::{App, AppConfig},
-    PartialRepositoryId,
-};
+use shub::app::{App, AppConfig};
 use std::{env, path::PathBuf};
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
@@ -24,7 +21,7 @@ async fn main() -> Result<(), Error> {
     let workspace_root_dir: PathBuf = env::var("WORKSPACE_HOME")?.into();
 
     let cfg = AppConfig {
-        username: &username,
+        github_username: &username,
         github_token: &github_token,
         workspace_root_dir: &workspace_root_dir,
     };

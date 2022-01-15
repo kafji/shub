@@ -1,8 +1,10 @@
-use crate::{GetRepositoryId, PartialRepositoryId, RepositoryId, Secret};
+use crate::{
+    local_repository_path, GetRepositoryId, OwnedRepository, PartialRepositoryId, RepositoryId,
+    Secret, StarredRepository,
+};
 use anyhow::{bail, Context, Error, Result};
 use async_stream::try_stream;
 use async_trait::async_trait;
-use chrono::{DateTime, TimeZone, Utc};
 use dialoguer::Confirm;
 use futures::{future, stream::TryStreamExt, Stream};
 use git2::{
@@ -11,50 +13,30 @@ use git2::{
 };
 use http::header::HeaderName;
 use indoc::formatdoc;
-use octocrab::{
-    models::{repos::Commit as GitHubCommit, Repository as GitHubRepository},
-    Octocrab, Page,
-};
+use octocrab::{models::Repository as GitHubRepository, Octocrab, Page};
 use serde::{Deserialize, Serialize};
-use std::{
-    borrow::Cow,
-    env, fmt,
-    future::Future,
-    path::{Path, PathBuf},
-    process::Command,
-};
-
-macro_rules! write_col {
-    ($w:expr, $len:expr, $txt:expr) => {
-        write!($w, "{:len$}", ellipsize($txt, $len as _), len = $len as _)
-    };
-    (, $w:expr, $len:expr, $txt:expr) => {
-        write!($w, " | {:len$}", ellipsize($txt, $len as _), len = $len as _)
-    };
-}
-
-const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), concat!("/", env!("CARGO_PKG_VERSION")));
+use std::{env, fmt, future::Future, path::Path, process::Command};
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct AppConfig<'a> {
-    pub username: &'a str,
+    pub github_username: &'a str,
     pub github_token: &'a str,
     pub workspace_root_dir: &'a Path,
 }
 
 #[derive(Debug)]
 pub struct App<'a> {
-    username: &'a str,
+    github_username: &'a str,
     github_token: Secret<&'a str>,
     workspace_root_dir: &'a Path,
 }
 
 impl<'a> App<'a> {
     pub fn new(
-        AppConfig { username, github_token, workspace_root_dir }: AppConfig<'a>,
+        AppConfig { github_username, github_token, workspace_root_dir }: AppConfig<'a>,
     ) -> Result<Self, Error> {
         let github_token = github_token.into();
-        let s = Self { username, github_token, workspace_root_dir };
+        let s = Self { github_username, github_token, workspace_root_dir };
         Ok(s)
     }
 
@@ -62,7 +44,7 @@ impl<'a> App<'a> {
         &self,
         repo_id: PartialRepositoryId,
     ) -> Result<(), Error> {
-        let RepositoryId { owner, name } = repo_id.complete(self.username);
+        let RepositoryId { owner, name } = repo_id.complete(self.github_username);
 
         let client = create_client()?;
         let repo = client.repos(owner, name).get().await?;
@@ -78,8 +60,8 @@ impl<'a> App<'a> {
         from: PartialRepositoryId,
         to: PartialRepositoryId,
     ) -> Result<(), Error> {
-        let from = from.complete(self.username);
-        let to = to.complete(self.username);
+        let from = from.complete(self.github_username);
+        let to = to.complete(self.github_username);
 
         let client = create_client()?;
 
@@ -110,8 +92,6 @@ impl<'a> App<'a> {
         {
             return Ok(());
         }
-
-        // Apply settings.
 
         let _: GitHubRepository = {
             let RepositoryId { owner, name } = to;
@@ -154,7 +134,7 @@ impl<'a> App<'a> {
         repo_id: PartialRepositoryId,
         upstream: bool,
     ) -> Result<(), Error> {
-        let RepositoryId { owner, name } = repo_id.complete(self.username);
+        let RepositoryId { owner, name } = repo_id.complete(self.github_username);
 
         let client = create_client()?;
 
@@ -230,9 +210,9 @@ impl<'a> App<'a> {
     }
 
     pub async fn clone_repository(&self, repo_id: PartialRepositoryId) -> Result<(), Error> {
-        let repo_id = repo_id.complete(self.username);
+        let repo_id = repo_id.complete(self.github_username);
 
-        if repo_id.owner != self.username {
+        if repo_id.owner != self.github_username {
             panic!();
         }
 
@@ -336,46 +316,6 @@ fn create_remote_callbacks<'a>() -> RemoteCallbacks<'a> {
     cbs
 }
 
-fn ellipsize(text: &str, threshold: usize) -> Cow<'_, str> {
-    debug_assert!(threshold > 2);
-    if text.len() <= threshold {
-        text.into()
-    } else {
-        let text: String =
-            text.chars().map(|c| if c == '\n' { ' ' } else { c }).take(threshold - 2).collect();
-        let text: String = text.trim().chars().chain("..".chars()).collect();
-        text.into()
-    }
-}
-
-#[cfg(test)]
-#[test]
-fn test_ellipsize() {
-    use quickcheck::{quickcheck, TestResult};
-
-    fn has_max_length_threshold(text: String, threshold: usize) -> TestResult {
-        if threshold < 4 {
-            return TestResult::discard();
-        }
-        TestResult::from_bool(ellipsize(&text, threshold).chars().count() <= threshold)
-    }
-
-    quickcheck(has_max_length_threshold as fn(_, _) -> TestResult);
-
-    fn has_ellipsis_at_the_end(text: String, threshold: usize) -> TestResult {
-        if threshold < 4 {
-            return TestResult::discard();
-        }
-        if text.chars().count() <= threshold {
-            return TestResult::discard();
-        }
-        let ellipsized = ellipsize(&text, threshold);
-        TestResult::from_bool(ellipsized.ends_with("..."))
-    }
-
-    quickcheck(has_ellipsis_at_the_end as fn(_, _) -> TestResult);
-}
-
 trait ExtractRepositorySettings {
     fn extract_repository_settings(&self) -> Result<RepositorySettings, Error>;
 }
@@ -460,16 +400,12 @@ impl fmt::Display for RepositorySettingsDiff<'_> {
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub struct LanguageFilter {
-    pub negation: bool,
-    pub language: String,
-}
-
 fn create_client() -> Result<Octocrab, Error> {
-    let token = env::var("SHUB_TOKEN").expect("GITHUB_TOKEN env variable is required");
+    let user_agent =
+        concat!(env!("CARGO_PKG_NAME"), concat!("/", env!("CARGO_PKG_VERSION"))).to_owned();
+    let token = env::var("SHUB_TOKEN")?;
     let client = Octocrab::builder()
-        .add_header(HeaderName::from_static("user-agent"), USER_AGENT.to_owned())
+        .add_header(HeaderName::from_static("user-agent"), user_agent)
         .personal_token(token)
         .build()?;
     Ok(client)
@@ -497,165 +433,4 @@ where
             page_num = (page_num.unwrap_or(1) + 1).into();
         }
     }
-}
-
-const REPO_NAME_LEN: u8 = 15;
-const REPO_DESC_LEN: u8 = 40;
-const OWNER_NAME_LEN: u8 = 15;
-const COMMIT_MSG_LEN: u8 = 40;
-const LANG_NAME_LEN: u8 = 10;
-const PUSHED_AT_LEN: u8 = 10;
-
-#[derive(PartialEq, Clone, Debug)]
-struct StarredRepository(GitHubRepository);
-
-impl fmt::Display for StarredRepository {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let repo = &self.0;
-
-        let name = &repo.name;
-        write_col!(f, REPO_NAME_LEN, name)?;
-
-        let desc = repo.description.as_ref().map(|x| x.as_str()).unwrap_or_default();
-        write_col!(, f, REPO_DESC_LEN, desc)?;
-
-        let owner = repo.owner.as_ref().map(|x| x.login.as_str()).unwrap_or_default();
-        write_col!(, f, OWNER_NAME_LEN, owner)?;
-
-        let pushed = repo
-            .pushed_at
-            .as_ref()
-            .map(|x| x.relative_from_now())
-            .map(|x| Cow::Owned(x))
-            .unwrap_or_default();
-        write_col!(, f, PUSHED_AT_LEN, &pushed)?;
-
-        let issues_count = repo.open_issues_count.unwrap_or_default();
-        write_col!(, f, 5, &issues_count.to_string())?;
-
-        let lang = repo.language.as_ref().map(|x| x.as_str()).flatten().unwrap_or_default();
-        write_col!(, f, LANG_NAME_LEN, lang)?;
-
-        let mut meta = Vec::new();
-        if let Some(true) = repo.archived {
-            meta.push("archived");
-        }
-        if let Some(true) = repo.fork {
-            meta.push("fork");
-        }
-        let meta = meta.into_iter().map(|x| ellipsize(x, 10)).collect::<Vec<_>>().join(", ");
-        write_col!(, f, 15, &meta)?;
-
-        Ok(())
-    }
-}
-
-#[derive(PartialEq, Clone, Debug)]
-struct OwnedRepository(GitHubRepository, Option<GitHubCommit>);
-
-impl fmt::Display for OwnedRepository {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let repo = &self.0;
-        let commit = &self.1;
-
-        let visibility =
-            repo.private.map(|x| if x { "private" } else { "public" }).unwrap_or_default();
-        write_col!(f, 6, visibility)?;
-
-        let name = &repo.name;
-        write_col!(, f, REPO_NAME_LEN, name)?;
-
-        let desc = repo.description.as_ref().map(|x| x.as_str()).unwrap_or_default();
-        write_col!(, f, REPO_DESC_LEN, desc)?;
-
-        let pushed = repo
-            .pushed_at
-            .as_ref()
-            .map(|x| x.relative_from_now())
-            .map(|x| Cow::Owned(x))
-            .unwrap_or_default();
-        write_col!(, f, PUSHED_AT_LEN, &pushed)?;
-
-        let last_commit = commit
-            .as_ref()
-            .map(|x| x.commit.as_ref())
-            .flatten()
-            .map(|x| x.message.as_str())
-            .unwrap_or_default();
-        write_col!(, f, COMMIT_MSG_LEN, last_commit)?;
-
-        let lang = repo.language.as_ref().map(|x| x.as_str()).flatten().unwrap_or_default();
-        write_col!(, f, LANG_NAME_LEN, lang)?;
-
-        let mut meta = Vec::new();
-        if let Some(true) = repo.archived {
-            meta.push("archived");
-        }
-        if let Some(true) = repo.fork {
-            meta.push("fork");
-        }
-        let meta = meta.into_iter().map(|x| ellipsize(x, 10)).collect::<Vec<_>>().join(", ");
-        write_col!(, f, 15, &meta)?;
-
-        Ok(())
-    }
-}
-
-/// Relative time from now.
-trait RelativeFromNow {
-    fn relative_from_now(&self) -> String;
-}
-
-impl<T> RelativeFromNow for DateTime<T>
-where
-    T: TimeZone,
-{
-    fn relative_from_now(&self) -> String {
-        let duration = Utc::now().signed_duration_since(self.clone());
-        let age = Since(duration);
-        age.to_string()
-    }
-}
-
-#[derive(PartialEq, Copy, Clone, Debug)]
-struct Since(chrono::Duration);
-
-impl fmt::Display for Since {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let days = self.0.num_days();
-        match days {
-            _ if days < 1 => {
-                write!(f, "today")
-            }
-            _ if days < 7 => {
-                write!(f, "this week")
-            }
-            _ if days < 30 => {
-                write!(f, "this month")
-            }
-            _ if days < 365 => {
-                write!(f, "this year")
-            }
-            _ => {
-                let years = days / 365;
-                if years == 1 {
-                    write!(f, "{} year ago", years)
-                } else {
-                    write!(f, "{} years ago", years)
-                }
-            }
-        }
-    }
-}
-
-fn local_repository_path(workspace: impl AsRef<Path>, repo_id: &RepositoryId) -> PathBuf {
-    workspace.as_ref().to_path_buf().join(&repo_id.owner).join(&repo_id.name)
-}
-
-#[cfg(test)]
-#[test]
-fn test_local_repository_path() {
-    let workspace = "./workspace";
-    let path = local_repository_path(workspace, &RepositoryId::new("kafji", "shub"));
-    assert_eq!(path.display().to_string(), "./workspace/kafji/shub");
 }
