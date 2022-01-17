@@ -21,10 +21,11 @@ http = "0.2"
 indoc = "1"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
 toml = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-octocrab = { git = "https://github.com/kafji/octocrab", branch = "kfj/patched" }
+octocrab = { git = "https://github.com/XAMPPRocky/octocrab" }
 
 [dev-dependencies]
 quickcheck = "1"

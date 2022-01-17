@@ -1,16 +1,17 @@
 use crate::{
-    local_repository_path, GetRepositoryId, OwnedRepository, PartialRepositoryId, RepositoryId,
-    Secret, StarredRepository,
+    github::GitHubClientImpl, local_repository_path, GetRepositoryId, OwnedRepository,
+    PartialRepositoryId, RepositoryId, Secret, StarredRepository,
 };
 use anyhow::{bail, Context, Error, Result};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use dialoguer::Confirm;
-use futures::{future, stream::TryStreamExt, Stream};
-use git2::{
-    build::RepoBuilder, Branch, Cred, FetchOptions, IndexAddOption, PushOptions, RemoteCallbacks,
-    Repository as GitRepository,
+use futures::{
+    future,
+    stream::{LocalBoxStream, TryStreamExt},
+    Stream, StreamExt,
 };
+use git2::{build::RepoBuilder, Cred, FetchOptions, PushOptions, RemoteCallbacks};
 use http::header::HeaderName;
 use indoc::formatdoc;
 use octocrab::{models::Repository as GitHubRepository, Octocrab, Page};
@@ -25,21 +26,28 @@ pub struct AppConfig<'a> {
 }
 
 #[derive(Debug)]
-pub struct App<'a> {
+pub struct App<'a, GitHubClient> {
     github_username: &'a str,
     github_token: Secret<&'a str>,
     workspace_root_dir: &'a Path,
+    github_client: GitHubClient,
 }
 
-impl<'a> App<'a> {
+impl<'a> App<'a, GitHubClientImpl> {
     pub fn new(
         AppConfig { github_username, github_token, workspace_root_dir }: AppConfig<'a>,
     ) -> Result<Self, Error> {
         let github_token = github_token.into();
-        let s = Self { github_username, github_token, workspace_root_dir };
+        let github_client = crate::github::GitHubClientImpl::new()?;
+        let s = Self { github_username, github_token, workspace_root_dir, github_client };
         Ok(s)
     }
+}
 
+impl<'a, GitHubClient> App<'a, GitHubClient>
+where
+    GitHubClient: self::GitHubClient<'a>,
+{
     pub async fn view_repository_settings(
         &self,
         repo_id: PartialRepositoryId,
@@ -101,24 +109,8 @@ impl<'a> App<'a> {
         Ok(())
     }
 
-    pub async fn list_starred_repositories(&self) -> Result<(), Error> {
-        let repos = unpage(&|page_num| async move {
-            let client = create_client()?;
-            let req = {
-                let b = client
-                    .current()
-                    .list_repos_starred_by_authenticated_user()
-                    .sort("updated")
-                    .per_page(100);
-                let b = match page_num {
-                    Some(x) => b.page(x),
-                    None => b,
-                };
-                b
-            };
-            let repos = req.send().await?;
-            Ok(repos)
-        });
+    pub async fn list_starred_repositories(&'a self) -> Result<(), Error> {
+        let repos = self.github_client.list_stared_repositories();
         repos
             .map_ok(StarredRepository)
             .try_for_each(|repo| {
@@ -167,32 +159,19 @@ impl<'a> App<'a> {
         Ok(())
     }
 
-    pub async fn list_owned_repositories(&self) -> Result<(), Error> {
-        let repos = unpage(&|page_num| async move {
-            let client = create_client()?;
-            let req = {
-                let b = client
-                    .current()
-                    .list_repos_for_authenticated_user()
-                    .type_("owner")
-                    .sort("pushed")
-                    .per_page(100);
-                let b = match page_num {
-                    Some(x) => b.page(x),
-                    None => b,
-                };
-                b
-            };
-            let repos = req.send().await?;
-            Ok(repos)
-        });
+    pub async fn list_owned_repositories(&'a self) -> Result<(), Error> {
+        let repos = self.github_client.list_owned_repositories();
         repos
             .and_then(|repo| async {
                 let repo_id = repo.get_repository_id()?;
                 let client = create_client()?;
-                let commits =
-                    client.repos(repo_id.owner, repo_id.name).commits().per_page(1).send().await?;
-                let commit = commits.items.first().map(ToOwned::to_owned);
+                let commits: Vec<_> = self
+                    .github_client
+                    .list_repository_commits(repo_id)
+                    .take(1)
+                    .try_collect()
+                    .await?;
+                let commit = commits.first().map(ToOwned::to_owned);
                 Ok(OwnedRepository(repo, commit))
             })
             .try_for_each(|repo| {
@@ -253,43 +232,6 @@ impl<'a> App<'a> {
                 .fetch(&["+refs/heads/*:refs/remotes/origin/*"], Some(&mut options), None)
                 .context("Failed to fetch upstream.")?;
         }
-
-        Ok(())
-    }
-
-    pub async fn dump_changes(&self) -> Result<(), Error> {
-        let repo = GitRepository::discover("./")?;
-
-        let head = repo.head()?;
-        if !head.is_branch() {
-            bail!("HEAD is not a branch.")
-        }
-        let local_branch = Branch::wrap(head);
-        match local_branch.name()? {
-            Some(name) => {
-                if name != "master" {
-                    bail!("Can only dump `master` branch.")
-                }
-            }
-            None => bail!("Branch name is not a valid utf-8."),
-        };
-        let mut remote = repo.find_remote("origin")?;
-
-        // Add.
-        let mut index = repo.index()?;
-        index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
-        index.write()?;
-
-        // Commit.
-        let signature = repo.signature()?;
-        let tree = repo.find_tree(index.write_tree()?)?;
-        let parent = local_branch.into_reference().peel_to_commit()?;
-        repo.commit("HEAD".into(), &signature, &signature, "dump (Shub)", &tree, &[&parent])?;
-
-        // Push.
-        let refspecs = vec!["refs/heads/master:refs/heads/master"];
-        let mut opts = create_push_options();
-        remote.push(&refspecs, (&mut opts).into())?;
 
         Ok(())
     }
@@ -433,4 +375,36 @@ where
             page_num = (page_num.unwrap_or(1) + 1).into();
         }
     }
+}
+
+#[derive(Deserialize, PartialEq, Clone, Debug)]
+pub struct GitHubCommit {
+    pub commit: GitHubCommitDetail,
+    pub author: Option<GitHubCommitActor>,
+    pub committer: Option<GitHubCommitActor>,
+}
+
+#[derive(Deserialize, PartialEq, Clone, Debug)]
+pub struct GitHubCommitDetail {
+    pub message: String,
+}
+
+#[derive(Deserialize, PartialEq, Clone, Debug)]
+#[non_exhaustive]
+pub struct GitHubCommitActor {
+    pub login: String,
+    pub id: u32,
+    pub r#type: String,
+}
+
+#[async_trait]
+pub trait GitHubClient<'a> {
+    fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<GitHubRepository, Error>>;
+
+    fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<GitHubRepository, Error>>;
+
+    fn list_repository_commits(
+        &'a self,
+        repo_id: RepositoryId,
+    ) -> LocalBoxStream<'a, Result<GitHubCommit, Error>>;
 }

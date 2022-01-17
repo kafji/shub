@@ -11,33 +11,23 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Repository related operations.
-    Repo {
+    Repos {
         #[clap(subcommand)]
-        cmd: self::repo::Commands,
-    },
-    /// Action related operations.
-    Action {
-        #[clap(subcommand)]
-        cmd: self::action::Commands,
+        cmd: self::repos::Commands,
     },
     /// Stars related operations.
     Stars {
         #[clap(subcommand)]
         cmd: self::stars::Commands,
     },
-    /// Git operations.
-    Git {
-        #[clap(subcommand)]
-        cmd: self::git::Commands,
-    },
     /// Workspace operations.
-    Ws {
+    Workspace {
         #[clap(subcommand)]
-        cmd: self::ws::Commands,
+        cmd: self::workspace::Commands,
     },
 }
 
-pub mod repo {
+pub mod repos {
     use super::*;
 
     #[derive(Subcommand, Debug)]
@@ -63,13 +53,23 @@ pub mod repo {
             /// Repository identifier.
             repo: RepositoryId,
         },
-        /// Clone remote repository.
+        /// Clone remote repository. Only support cloning owned repository.
         Clone {
             /// Repository identifier.
             repo: PartialRepositoryId,
         },
         /// Create repository.
         Create {
+            /// Repository identifier.
+            repo: PartialRepositoryId,
+        },
+        /// Delete repository. Only support deleting forked repository.
+        Delete {
+            /// Repository identifier.
+            repo: PartialRepositoryId,
+        },
+        /// Print actions status of a repositroy.
+        Status {
             /// Repository identifier.
             repo: PartialRepositoryId,
         },
@@ -98,19 +98,6 @@ pub mod repo {
     }
 }
 
-pub mod action {
-    use super::*;
-
-    #[derive(Subcommand, Debug)]
-    pub enum Commands {
-        /// Print actions status of a repositroy.
-        Status {
-            /// Repository identifier.
-            repo: PartialRepositoryId,
-        },
-    }
-}
-
 pub mod stars {
     use super::*;
 
@@ -127,17 +114,7 @@ pub mod stars {
     }
 }
 
-pub mod git {
-    use super::*;
-
-    #[derive(Subcommand, Debug)]
-    pub enum Commands {
-        /// `git commit -am "dump" && git push origin`
-        Dump {},
-    }
-}
-
-pub mod ws {
+pub mod workspace {
     use super::*;
 
     #[derive(Subcommand, Debug)]

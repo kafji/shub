@@ -31,31 +31,29 @@ async fn main() -> Result<(), Error> {
     let app = App::new(cfg)?;
 
     match cmd.cmd {
-        Commands::Repo { cmd } => match cmd {
-            repo::Commands::Ls {} => app.list_owned_repositories().await?,
-            repo::Commands::Open { repo, upstream } => app.open_repository(repo, upstream).await?,
-            repo::Commands::Settings { cmd } => match cmd {
-                repo::settings::Commands::View { repo } => {
+        Commands::Repos { cmd } => match cmd {
+            repos::Commands::Ls {} => app.list_owned_repositories().await?,
+            repos::Commands::Open { repo, upstream } => app.open_repository(repo, upstream).await?,
+            repos::Commands::Settings { cmd } => match cmd {
+                repos::settings::Commands::View { repo } => {
                     app.view_repository_settings(repo).await?
                 }
-                repo::settings::Commands::Apply { from, to } => {
+                repos::settings::Commands::Apply { from, to } => {
                     app.apply_repository_settings(from, to).await?
                 }
             },
-            repo::Commands::Fork { repo } => app.fork_repository(repo).await?,
-            repo::Commands::Clone { repo } => app.clone_repository(repo).await?,
-            repo::Commands::Create { repo } => todo!(),
+            repos::Commands::Fork { repo } => app.fork_repository(repo).await?,
+            repos::Commands::Clone { repo } => app.clone_repository(repo).await?,
+            repos::Commands::Create { repo } => todo!(),
+            repos::Commands::Delete { repo } => todo!(),
+            repos::Commands::Status { repo } => todo!(),
         },
-        Commands::Action { cmd } => todo!(),
         Commands::Stars { cmd } => match cmd {
             stars::Commands::Ls {} => app.list_starred_repositories().await?,
             stars::Commands::Star { repo } => todo!(),
             stars::Commands::Unstar { repo } => todo!(),
         },
-        Commands::Git { cmd } => match cmd {
-            git::Commands::Dump {} => app.dump_changes().await?,
-        },
-        Commands::Ws { cmd } => todo!(),
+        Commands::Workspace { cmd } => todo!(),
     };
 
     debug!("Exit.");

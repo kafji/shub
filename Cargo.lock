@@ -860,7 +860,7 @@ dependencies = [
 [[package]]
 name = "octocrab"
 version = "0.15.3"
-source = "git+https://github.com/kafji/octocrab?branch=kfj/patched#305548c84e2b1f20f9e8dfc1140c5ee6cc188fbe"
+source = "git+https://github.com/XAMPPRocky/octocrab#1c7c1fcc3382a84c1a3d8e23d14aed1b86e2cd5d"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -1295,6 +1295,7 @@ dependencies = [
  "serde",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "toml",
  "tracing",
  "tracing-subscriber",
@@ -1484,6 +1485,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7d995660bd2b7f8c1568414c1126076c13fbb725c40112dc0120b78eb9b717b"
 dependencies = [
  "native-tls",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50145484efff8818b5ccd256697f36863f587da82cf8b409c53adf1e840798e3"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
  "tokio",
 ]
 

@@ -1,8 +1,10 @@
 mod display;
+mod github;
 
 pub mod app;
 
 use anyhow::{bail, Error};
+use app::GitHubCommit;
 use core::fmt;
 use octocrab::models::{repos::Commit, Repository};
 use std::{
@@ -211,4 +213,4 @@ fn test_local_repository_path() {
 struct StarredRepository(Repository);
 
 #[derive(PartialEq, Clone, Debug)]
-struct OwnedRepository(Repository, Option<Commit>);
+struct OwnedRepository(Repository, Option<GitHubCommit>);

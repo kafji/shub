@@ -18,7 +18,6 @@ macro_rules! write_col {
     };
 }
 
-const REPO_DESC_LEN: u8 = 40;
 const OWNER_NAME_LEN: u8 = 15;
 const COMMIT_MSG_LEN: u8 = 40;
 const LANG_NAME_LEN: u8 = 10;
@@ -154,6 +153,23 @@ impl fmt::Display for RepositoryAttrs {
     }
 }
 
+#[derive(Debug)]
+struct RepositoryDescription<'a>(&'a str, usize);
+
+impl<'a> RepositoryDescription<'a> {
+    fn from_repository(repository: &'a Repository, length: usize) -> Self {
+        let desc = repository.description.as_ref().map(|x| x.as_str()).unwrap_or_default();
+        Self(desc, length)
+    }
+}
+
+impl fmt::Display for RepositoryDescription<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write_col!(f, self.1, self.0)?;
+        Ok(())
+    }
+}
+
 impl fmt::Display for OwnedRepository {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let repo = &self.0;
@@ -166,8 +182,8 @@ impl fmt::Display for OwnedRepository {
         let name: RepositoryName = repo.into();
         write!(f, "{}", name)?;
 
-        let desc = repo.description.as_ref().map(|x| x.as_str()).unwrap_or_default();
-        write_col!(, f, REPO_DESC_LEN, desc)?;
+        let desc = RepositoryDescription::from_repository(&repo, 30);
+        write!(f, " | {}", &desc.to_string())?;
 
         let pushed = repo
             .pushed_at
@@ -177,12 +193,8 @@ impl fmt::Display for OwnedRepository {
             .unwrap_or_default();
         write_col!(, f, PUSHED_AT_LEN, &pushed)?;
 
-        let last_commit = commit
-            .as_ref()
-            .map(|x| x.commit.as_ref())
-            .flatten()
-            .map(|x| x.message.as_str())
-            .unwrap_or_default();
+        let last_commit =
+            commit.as_ref().map(|x| &x.commit).map(|x| x.message.as_str()).unwrap_or_default();
         write_col!(, f, COMMIT_MSG_LEN, last_commit)?;
 
         let lang = repo.language.as_ref().map(|x| x.as_str()).flatten().unwrap_or_default();
@@ -202,8 +214,8 @@ impl fmt::Display for StarredRepository {
         let name: RepositoryName = repo.into();
         write!(f, "{}", name)?;
 
-        let desc = repo.description.as_ref().map(|x| x.as_str()).unwrap_or_default();
-        write_col!(, f, REPO_DESC_LEN, desc)?;
+        let desc = RepositoryDescription::from_repository(&repo, 60);
+        write!(f, " | {}", &desc.to_string())?;
 
         let owner = repo.owner.as_ref().map(|x| x.login.as_str()).unwrap_or_default();
         write_col!(, f, OWNER_NAME_LEN, owner)?;
