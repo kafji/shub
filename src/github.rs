@@ -1,14 +1,13 @@
 use crate::{
     app::{GitHubClient, GitHubCommit},
-    RepositoryId,
+    RepositoryId, Secret,
 };
-use anyhow::Error;
+use anyhow::{bail, Error};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use futures::{stream::LocalBoxStream, Future, Stream, StreamExt};
 use http::header::HeaderName;
-use octocrab::models::Repository;
-use octocrab::{Octocrab, Page};
+use octocrab::{models::Repository, Octocrab, Page};
 use std::{borrow::Cow, env};
 
 #[derive(Clone, Debug)]
@@ -17,13 +16,13 @@ pub struct GitHubClientImpl {
 }
 
 impl GitHubClientImpl {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new(token: impl Into<Secret<String>>) -> Result<Self, Error> {
         let user_agent =
             concat!(env!("CARGO_PKG_NAME"), concat!("/", env!("CARGO_PKG_VERSION"))).to_owned();
-        let token = env::var("SHUB_TOKEN")?;
+        let token: Secret<_> = token.into();
         let client = Octocrab::builder()
             .add_header(HeaderName::from_static("user-agent"), user_agent)
-            .personal_token(token)
+            .personal_token(token.0)
             .build()?;
         let s = Self { client };
         Ok(s)
@@ -86,6 +85,29 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
             }
         }));
         repos.boxed_local()
+    }
+
+    async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<Repository, Error> {
+        let client = &self.client;
+        let repo = client.repos(&repo_id.owner, &repo_id.name).get().await;
+        let repo = match repo {
+            Ok(x) => x,
+            Err(err) => {
+                if matches!(&err, octocrab::Error::GitHub { source, .. } if source.message == "Not Found")
+                {
+                    bail!("Repository {repo_id} does not exist.")
+                } else {
+                    return Err(err.into());
+                }
+            }
+        };
+        Ok(repo)
+    }
+
+    async fn delete_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error> {
+        let client = &self.client;
+        client.repos(repo_id.owner, repo_id.name).delete().await?;
+        Ok(())
     }
 }
 

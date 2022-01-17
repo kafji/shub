@@ -2,33 +2,31 @@ use crate::{
     github::GitHubClientImpl, local_repository_path, GetRepositoryId, OwnedRepository,
     PartialRepositoryId, RepositoryId, Secret, StarredRepository,
 };
-use anyhow::{bail, Context, Error, Result};
-use async_stream::try_stream;
+use anyhow::{bail, ensure, Context, Error, Result};
 use async_trait::async_trait;
 use dialoguer::Confirm;
 use futures::{
     future,
     stream::{LocalBoxStream, TryStreamExt},
-    Stream, StreamExt,
+    StreamExt,
 };
-use git2::{build::RepoBuilder, Cred, FetchOptions, PushOptions, RemoteCallbacks};
+use git2::{build::RepoBuilder, Cred, FetchOptions, RemoteCallbacks};
 use http::header::HeaderName;
 use indoc::formatdoc;
-use octocrab::{models::Repository as GitHubRepository, Octocrab, Page};
+use octocrab::{models::Repository as GitHubRepository, Octocrab};
 use serde::{Deserialize, Serialize};
-use std::{env, fmt, future::Future, path::Path, process::Command};
+use std::{env, fmt, path::Path, process::Command};
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct AppConfig<'a> {
     pub github_username: &'a str,
-    pub github_token: &'a str,
+    pub github_token: Secret<&'a str>,
     pub workspace_root_dir: &'a Path,
 }
 
 #[derive(Debug)]
 pub struct App<'a, GitHubClient> {
     github_username: &'a str,
-    github_token: Secret<&'a str>,
     workspace_root_dir: &'a Path,
     github_client: GitHubClient,
 }
@@ -37,9 +35,9 @@ impl<'a> App<'a, GitHubClientImpl> {
     pub fn new(
         AppConfig { github_username, github_token, workspace_root_dir }: AppConfig<'a>,
     ) -> Result<Self, Error> {
-        let github_token = github_token.into();
-        let github_client = crate::github::GitHubClientImpl::new()?;
-        let s = Self { github_username, github_token, workspace_root_dir, github_client };
+        let github_client =
+            crate::github::GitHubClientImpl::new(github_token.map(ToOwned::to_owned))?;
+        let s = Self { github_username, workspace_root_dir, github_client };
         Ok(s)
     }
 }
@@ -49,17 +47,13 @@ where
     GitHubClient: self::GitHubClient<'a>,
 {
     pub async fn view_repository_settings(
-        &self,
+        &'a self,
         repo_id: PartialRepositoryId,
     ) -> Result<(), Error> {
-        let RepositoryId { owner, name } = repo_id.complete(self.github_username);
-
-        let client = create_client()?;
-        let repo = client.repos(owner, name).get().await?;
+        let repo_id = repo_id.complete(self.github_username);
+        let repo = self.github_client.get_repository(repo_id).await?;
         let settings = repo.extract_repository_settings()?;
-
         println!("{}", settings);
-
         Ok(())
     }
 
@@ -122,30 +116,17 @@ where
     }
 
     pub async fn open_repository(
-        &self,
+        &'a self,
         repo_id: PartialRepositoryId,
         upstream: bool,
     ) -> Result<(), Error> {
-        let RepositoryId { owner, name } = repo_id.complete(self.github_username);
+        let repo_id = repo_id.complete(self.github_username);
 
-        let client = create_client()?;
-
-        let repo = client.repos(&owner, &name).get().await;
-        let repo = match repo {
-            Ok(x) => x,
-            Err(err) => {
-                if matches!(&err, octocrab::Error::GitHub { source, .. } if source.message == "Not Found")
-                {
-                    bail!("Repository {}/{} does not exist.", owner, name)
-                } else {
-                    return Err(err.into());
-                }
-            }
-        };
+        let repo = self.github_client.get_repository(repo_id.clone()).await?;
 
         let url = if upstream {
             if !repo.fork.unwrap_or_default() {
-                bail!("Repository {}/{} is not a fork.", owner, name)
+                bail!("Repository {repo_id} is not a fork.")
             }
             repo.parent
                 .map(|x| x.html_url)
@@ -164,7 +145,6 @@ where
         repos
             .and_then(|repo| async {
                 let repo_id = repo.get_repository_id()?;
-                let client = create_client()?;
                 let commits: Vec<_> = self
                     .github_client
                     .list_repository_commits(repo_id)
@@ -188,15 +168,12 @@ where
         Ok(())
     }
 
-    pub async fn clone_repository(&self, repo_id: PartialRepositoryId) -> Result<(), Error> {
+    pub async fn clone_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
         let repo_id = repo_id.complete(self.github_username);
 
-        if repo_id.owner != self.github_username {
-            panic!();
-        }
+        ensure!(repo_id.owner != self.github_username);
 
-        let client = create_client()?;
-        let repo_info = client.repos(&repo_id.owner, &repo_id.name).get().await?;
+        let repo_info = self.github_client.get_repository(repo_id.clone()).await?;
 
         let ssh_url = repo_info
             .ssh_url
@@ -235,16 +212,18 @@ where
 
         Ok(())
     }
+
+    pub async fn delete_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
+        let repo_id = repo_id.complete(self.github_username);
+        let repo = self.github_client.get_repository(repo_id.clone()).await?;
+        ensure!(repo.fork.unwrap_or_default());
+        self.github_client.delete_repository(repo_id).await?;
+        Ok(())
+    }
 }
 
 fn create_fetch_options<'a>() -> FetchOptions<'a> {
     let mut opts = FetchOptions::new();
-    opts.remote_callbacks(create_remote_callbacks());
-    opts
-}
-
-fn create_push_options<'a>() -> PushOptions<'a> {
-    let mut opts = PushOptions::new();
     opts.remote_callbacks(create_remote_callbacks());
     opts
 }
@@ -342,6 +321,7 @@ impl fmt::Display for RepositorySettingsDiff<'_> {
     }
 }
 
+#[deprecated]
 fn create_client() -> Result<Octocrab, Error> {
     let user_agent =
         concat!(env!("CARGO_PKG_NAME"), concat!("/", env!("CARGO_PKG_VERSION"))).to_owned();
@@ -351,30 +331,6 @@ fn create_client() -> Result<Octocrab, Error> {
         .personal_token(token)
         .build()?;
     Ok(client)
-}
-
-fn unpage<'a, T, F>(
-    factory: &'a dyn Fn(Option<u8>) -> F,
-) -> impl Stream<Item = Result<T, Error>> + 'a
-where
-    T: 'a + Send,
-    F: Future<Output = Result<Page<T>, Error>>,
-{
-    try_stream! {
-        let mut page_num = None;
-        loop {
-            let req = (factory)(page_num);
-            let page = req.await?;
-            let has_next = page.next.is_some();
-            for repo in page {
-                yield repo;
-            }
-            if !has_next {
-                break;
-            }
-            page_num = (page_num.unwrap_or(1) + 1).into();
-        }
-    }
 }
 
 #[derive(Deserialize, PartialEq, Clone, Debug)]
@@ -407,4 +363,8 @@ pub trait GitHubClient<'a> {
         &'a self,
         repo_id: RepositoryId,
     ) -> LocalBoxStream<'a, Result<GitHubCommit, Error>>;
+
+    async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<GitHubRepository, Error>;
+
+    async fn delete_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error>;
 }

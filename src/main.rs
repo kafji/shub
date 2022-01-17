@@ -2,7 +2,10 @@ mod cli;
 
 use crate::cli::*;
 use anyhow::{Error, Result};
-use shub::app::{App, AppConfig};
+use shub::{
+    app::{App, AppConfig},
+    Secret,
+};
 use std::{env, path::PathBuf};
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
@@ -17,12 +20,12 @@ async fn main() -> Result<(), Error> {
     let cmd = cmd();
 
     let username = env::var("SHUB_USERNAME")?;
-    let github_token = env::var("SHUB_TOKEN")?;
+    let github_token = Secret(env::var("SHUB_TOKEN")?);
     let workspace_root_dir: PathBuf = env::var("WORKSPACE_HOME")?.into();
 
     let cfg = AppConfig {
         github_username: &username,
-        github_token: &github_token,
+        github_token: github_token.as_ref().map(|x| x.as_str()),
         workspace_root_dir: &workspace_root_dir,
     };
 
@@ -45,7 +48,7 @@ async fn main() -> Result<(), Error> {
             repos::Commands::Fork { repo } => app.fork_repository(repo).await?,
             repos::Commands::Clone { repo } => app.clone_repository(repo).await?,
             repos::Commands::Create { repo } => todo!(),
-            repos::Commands::Delete { repo } => todo!(),
+            repos::Commands::Delete { repo } => app.delete_repository(repo).await?,
             repos::Commands::Status { repo } => todo!(),
         },
         Commands::Stars { cmd } => match cmd {
