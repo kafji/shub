@@ -42,7 +42,7 @@ pub mod repos {
         /// Open repository.
         Open {
             /// Repository identifier.
-            repo: PartialRepositoryId,
+            repo: Option<PartialRepositoryId>,
 
             /// Open the upstream repository.
             #[clap(long)]

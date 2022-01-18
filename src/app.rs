@@ -119,10 +119,13 @@ where
 
     pub async fn open_repository(
         &'a self,
-        repo_id: PartialRepositoryId,
+        repo_id: Option<PartialRepositoryId>,
         upstream: bool,
     ) -> Result<(), Error> {
-        let repo_id = repo_id.complete(self.github_username);
+        let repo_id = match repo_id {
+            Some(repo_id) => repo_id.complete(self.github_username),
+            None => repo_id_for_cwd().await?,
+        };
 
         let repo = self.github_client.get_repository(repo_id.clone()).await?;
 
@@ -138,6 +141,7 @@ where
         };
 
         Command::new("xdg-open").arg(url.as_str()).status()?;
+
         Ok(())
     }
 
@@ -227,16 +231,7 @@ where
 
         let repo_id = match repo_id {
             Some(repo_id) => repo_id.complete(self.github_username),
-            None => {
-                let repo = git2::Repository::discover(".")?;
-                let origin = repo.find_remote("origin")?;
-                let url = origin.url().unwrap();
-                // This is a very naive impl.
-                let start = url.find(':').unwrap();
-                let end = url.find(".git").unwrap();
-                let repo_id = &url[start + 1..end];
-                repo_id.parse()?
-            }
+            None => repo_id_for_cwd().await?,
         };
         writeln!(stdout, "{repo_id}")?;
         stdout.flush()?;
@@ -397,6 +392,19 @@ impl fmt::Display for RepositorySettingsDiff<'_> {
         diff_key!(f, self, allow_merge_commit)?;
         Ok(())
     }
+}
+
+async fn repo_id_for_cwd() -> Result<RepositoryId, Error> {
+    task::block_in_place(|| {
+        let repo = git2::Repository::discover(".")?;
+        let origin = repo.find_remote("origin")?;
+        let url = origin.url().unwrap();
+        let start = url.find(':').unwrap();
+        let end = url.find(".git").unwrap();
+        let repo_id = &url[start + 1..end];
+        let repo_id = repo_id.parse()?;
+        Ok(repo_id)
+    })
 }
 
 #[deprecated]
