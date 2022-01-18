@@ -16,6 +16,7 @@ clap = { version = "3", default-features = false, features = [
 ] }
 console = "0.15"
 dialoguer = "0.9"
+fastrand = "1"
 futures = "0.3"
 git2 = "0.13"
 http = "0.2"

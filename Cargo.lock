@@ -1286,6 +1286,7 @@ dependencies = [
  "clap",
  "console",
  "dialoguer",
+ "fastrand",
  "futures",
  "git2",
  "http",
