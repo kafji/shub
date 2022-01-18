@@ -250,7 +250,10 @@ where
             };
             commits.first().map(ToOwned::to_owned)
         };
-        let commit = commit.unwrap();
+        let commit = match commit {
+            Some(x) => x,
+            None => bail!("Repository {repo_id} doesn't have a commit yet."),
+        };
         let commit_author = {
             let mut buf = String::new();
             let author = &commit.commit.author;
