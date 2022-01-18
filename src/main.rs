@@ -49,7 +49,7 @@ async fn main() -> Result<(), Error> {
             repos::Commands::Clone { repo } => app.clone_repository(repo).await?,
             repos::Commands::Create { repo } => todo!(),
             repos::Commands::Delete { repo } => app.delete_repository(repo).await?,
-            repos::Commands::Status { repo, wait } => app.check_repository(repo, wait).await?,
+            repos::Commands::Status { repo } => app.check_repository(repo).await?,
         },
         Commands::Stars { cmd } => match cmd {
             stars::Commands::Ls {} => app.list_starred_repositories().await?,

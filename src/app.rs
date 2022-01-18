@@ -222,8 +222,9 @@ where
     pub async fn check_repository(
         &'a self,
         repo_id: Option<PartialRepositoryId>,
-        wait_completion: bool,
     ) -> Result<(), Error> {
+        let mut stdout = Term::buffered_stdout();
+
         let repo_id = match repo_id {
             Some(repo_id) => repo_id.complete(self.github_username),
             None => {
@@ -237,7 +238,10 @@ where
                 repo_id.parse()?
             }
         };
-        println!("{repo_id}\n/----------");
+        writeln!(stdout, "{repo_id}")?;
+        stdout.flush()?;
+
+        writeln!(stdout, "/----------")?;
 
         let commit = {
             let commits: Vec<_> = {
@@ -256,42 +260,39 @@ where
             buf.push('>');
             buf
         };
-        println!(
-            "{commit_author} - {}\n{}\n{}\n/----------",
+        writeln!(
+            stdout,
+            "{commit_author} - {}\n{}\n{}",
             commit.commit.author.date.relative_from_now(),
             commit.sha,
             commit.commit.message
-        );
+        )?;
+        stdout.flush()?;
 
-        {
-            let mut stdout = Term::buffered_stdout();
-            loop {
-                let checks =
-                    self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
+        writeln!(stdout, "/----------")?;
 
-                for c in &checks {
-                    writeln!(
-                        stdout,
-                        "{}: {} - {}",
-                        c.name,
-                        kceh::snake_case_to_statement(c.conclusion.as_deref().unwrap_or(&c.status)),
-                        c.completed_at.unwrap_or(c.started_at).relative_from_now()
-                    )?;
-                }
-
-                stdout.flush()?;
-
-                let completed = checks.iter().map(|x| x.completed_at.is_some()).all(|x| x);
-                if !wait_completion || completed {
-                    break;
-                }
-
-                tokio::time::sleep(Duration::from_secs(60)).await;
-                stdout.clear_last_lines(checks.len())?;
+        loop {
+            let checks =
+                self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
+            for c in &checks {
+                writeln!(
+                    stdout,
+                    "{}: {} - {}",
+                    c.name,
+                    kceh::snake_case_to_statement(c.conclusion.as_deref().unwrap_or(&c.status)),
+                    c.completed_at.unwrap_or(c.started_at).relative_from_now()
+                )?;
             }
             stdout.flush()?;
+            let completed = checks.iter().map(|x| x.completed_at.is_some()).all(|x| x);
+            if completed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            stdout.clear_last_lines(checks.len())?;
         }
 
+        stdout.flush()?;
         Ok(())
     }
 }
