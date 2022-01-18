@@ -4,6 +4,7 @@ use crate::{
 };
 use anyhow::{bail, ensure, Context, Error, Result};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use dialoguer::Confirm;
 use futures::{
     future,
@@ -235,7 +236,12 @@ where
 
         let checks = self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
         for c in checks {
-            println!("{}: {}", c.name, c.conclusion);
+            println!(
+                "{}: {} at {}",
+                c.name,
+                c.conclusion.unwrap_or(c.status),
+                c.completed_at.unwrap_or(c.started_at)
+            );
         }
 
         Ok(())
@@ -379,7 +385,9 @@ pub struct CheckRun {
     pub id: u64,
     pub head_sha: String,
     pub status: String,
-    pub conclusion: String,
+    pub conclusion: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
     pub output: Option<CheckRunOutput>,
     pub name: String,
 }
