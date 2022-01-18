@@ -21,7 +21,7 @@ macro_rules! write_col {
 const OWNER_NAME_LEN: u8 = 15;
 const COMMIT_MSG_LEN: u8 = 40;
 const LANG_NAME_LEN: u8 = 10;
-const PUSHED_AT_LEN: u8 = 10;
+const PUSHED_AT_LEN: u8 = 12;
 
 pub fn ellipsize(text: &str, threshold: usize) -> Cow<'_, str> {
     debug_assert!(threshold > 2);
@@ -236,9 +236,6 @@ impl fmt::Display for StarredRepository {
             .map(Cow::Owned)
             .unwrap_or_default();
         write_col!(, f, PUSHED_AT_LEN, &pushed)?;
-
-        let issues_count = repo.open_issues_count.unwrap_or_default();
-        write_col!(, f, 5, &issues_count.to_string())?;
 
         let lang = repo.language.as_ref().and_then(|x| x.as_str()).unwrap_or_default();
         write_col!(, f, LANG_NAME_LEN, lang, )?;
