@@ -90,7 +90,7 @@ impl fmt::Display for Since {
                 if hours < 1 {
                     let minutes = self.0.num_minutes();
                     if minutes < 1 {
-                        write!(f, "now")
+                        write!(f, "just now")
                     } else {
                         write!(f, "{minutes} minutes ago")
                     }
