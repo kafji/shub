@@ -269,22 +269,17 @@ where
                 let checks =
                     self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
 
-                task::block_in_place(|| {
-                    stdout.flush()?;
-                    for c in &checks {
-                        writeln!(
-                            stdout,
-                            "{}: {} - {}",
-                            c.name,
-                            kceh::snake_case_to_statement(
-                                c.conclusion.as_deref().unwrap_or(&c.status)
-                            ),
-                            c.completed_at.unwrap_or(c.started_at).relative_from_now()
-                        )?;
-                    }
-                    stdout.flush()?;
-                    Result::<_, Error>::Ok(())
-                })?;
+                for c in &checks {
+                    writeln!(
+                        stdout,
+                        "{}: {} - {}",
+                        c.name,
+                        kceh::snake_case_to_statement(c.conclusion.as_deref().unwrap_or(&c.status)),
+                        c.completed_at.unwrap_or(c.started_at).relative_from_now()
+                    )?;
+                }
+
+                stdout.flush()?;
 
                 let completed = checks.iter().map(|x| x.completed_at.is_some()).all(|x| x);
                 if !wait_completion || completed {
@@ -292,11 +287,9 @@ where
                 }
 
                 tokio::time::sleep(Duration::from_secs(60)).await;
-                task::block_in_place(|| {
-                    stdout.clear_last_lines(checks.len())?;
-                    Result::<_, Error>::Ok(())
-                })?;
+                stdout.clear_last_lines(checks.len())?;
             }
+            stdout.flush()?;
         }
 
         Ok(())
