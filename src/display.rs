@@ -64,7 +64,7 @@ fn test_ellipsize() {
 }
 
 /// Relative time from now.
-trait RelativeFromNow {
+pub trait RelativeFromNow {
     fn relative_from_now(&self) -> Since;
 }
 
@@ -79,14 +79,20 @@ where
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
-struct Since(chrono::Duration);
+pub struct Since(chrono::Duration);
 
 impl fmt::Display for Since {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let days = self.0.num_days();
         match days {
             _ if days < 1 => {
-                write!(f, "today")
+                let hours = self.0.num_hours();
+                if hours < 1 {
+                    let minutes = self.0.num_minutes();
+                    write!(f, "{minutes} minutes ago")
+                } else {
+                    write!(f, "{hours} hours ago")
+                }
             }
             _ if days < 7 => {
                 write!(f, "this week")
@@ -100,9 +106,9 @@ impl fmt::Display for Since {
             _ => {
                 let years = days / 365;
                 if years == 1 {
-                    write!(f, "{} year ago", years)
+                    write!(f, "{years} year ago")
                 } else {
-                    write!(f, "{} years ago", years)
+                    write!(f, "{years} years ago")
                 }
             }
         }

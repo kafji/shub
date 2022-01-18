@@ -1,4 +1,5 @@
 use crate::{
+    display::RelativeFromNow,
     github_client::GitHubClientImpl,
     github_models::{GhCheckRun, GhCommit, GhRepository},
     local_repository_path, GetRepositoryId, OwnedRepository, PartialRepositoryId, RepositoryId,
@@ -253,17 +254,19 @@ where
             buf
         };
         println!(
-            "{commit_author} at {}\n{}\n{}\n/----------",
-            commit.commit.author.date, commit.sha, commit.commit.message
+            "{commit_author} - {}\n{}\n{}\n/----------",
+            commit.commit.author.date.relative_from_now(),
+            commit.sha,
+            commit.commit.message
         );
 
         let checks = self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
         for c in checks {
             println!(
-                "{}: {} at {}",
+                "{}: {} - {}",
                 c.name,
                 c.conclusion.unwrap_or(c.status),
-                c.completed_at.unwrap_or(c.started_at)
+                c.completed_at.unwrap_or(c.started_at).relative_from_now()
             );
         }
 
