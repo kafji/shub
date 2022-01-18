@@ -267,7 +267,6 @@ where
             loop {
                 let checks =
                     self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
-
                 for c in &checks {
                     writeln!(
                         stdout,
@@ -277,15 +276,11 @@ where
                         c.completed_at.unwrap_or(c.started_at).relative_from_now()
                     )?;
                 }
-
                 let completed = checks.iter().map(|x| x.completed_at.is_some()).all(|x| x);
-
                 if !wait_completion || completed {
                     break;
                 }
-
                 tokio::time::sleep(Duration::from_secs(60)).await;
-
                 stdout.clear_last_lines(checks.len())?;
             }
         }
