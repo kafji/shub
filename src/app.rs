@@ -187,7 +187,7 @@ where
             None => None,
         };
 
-        let workspace_home = env::var("WORKSPACE_HOME")?;
+        let workspace_home = self.workspace_root_dir;
         let path = local_repository_path(workspace_home, &repo_id);
         println!("Cloning {repo_id} repository to {path}.", path = path.display());
         let repo = RepoBuilder::new()
@@ -219,8 +219,23 @@ where
         Ok(())
     }
 
-    pub async fn check_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
-        let repo_id = repo_id.complete(self.github_username);
+    pub async fn check_repository(
+        &'a self,
+        repo_id: Option<PartialRepositoryId>,
+    ) -> Result<(), Error> {
+        let repo_id = match repo_id {
+            Some(repo_id) => repo_id.complete(self.github_username),
+            None => {
+                let repo = git2::Repository::discover(".")?;
+                let origin = repo.find_remote("origin")?;
+                let url = origin.url().unwrap();
+                // This is a very naive impl.
+                let start = url.find(':').unwrap();
+                let end = url.find(".git").unwrap();
+                let repo_id = &url[start + 1..end];
+                repo_id.parse()?
+            }
+        };
         println!("{repo_id}\n/----------");
 
         let commit = {

@@ -68,10 +68,10 @@ pub mod repos {
             /// Repository identifier.
             repo: PartialRepositoryId,
         },
-        /// Print actions status of a repositroy.
+        /// Print actions status of a repoistory.
         Status {
             /// Repository identifier.
-            repo: PartialRepositoryId,
+            repo: Option<PartialRepositoryId>,
         },
     }
 

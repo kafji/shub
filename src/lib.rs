@@ -216,8 +216,8 @@ fn test_print_secret() {
     assert!(!format!("{secret:#?}").contains("sekret"));
 }
 
-fn local_repository_path(workspace: impl AsRef<Path>, repo_id: &RepositoryId) -> PathBuf {
-    workspace.as_ref().to_path_buf().join(&repo_id.owner).join(&repo_id.name)
+fn local_repository_path(workspace_dir: impl AsRef<Path>, repo_id: &RepositoryId) -> PathBuf {
+    workspace_dir.as_ref().to_path_buf().join(&repo_id.owner).join(&repo_id.name)
 }
 
 #[cfg(test)]
