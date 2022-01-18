@@ -1,5 +1,5 @@
 use crate::{
-    app::{GitHubClient, GitHubCommit},
+    app::{CheckRun, GitHubClient, GitHubCommit},
     RepositoryId, Secret,
 };
 use anyhow::{bail, Error};
@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use futures::{stream::LocalBoxStream, Future, Stream, StreamExt};
 use http::header::HeaderName;
 use octocrab::{models::Repository, Octocrab, Page};
-use std::{borrow::Cow, env};
+use serde::Deserialize;
+use std::{borrow::Cow, env, sync::Arc};
 
 #[derive(Clone, Debug)]
 pub struct GitHubClientImpl {
@@ -33,7 +34,7 @@ impl GitHubClientImpl {
 impl<'a> GitHubClient<'a> for GitHubClientImpl {
     fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<Repository, Error>> {
         let this = self.clone();
-        let repos = unpage(Box::new(move |page_num| {
+        let items = unpage(move |page_num| {
             let client = this.client.clone();
             async move {
                 let path: Cow<_> = if let Some(page_num) = page_num {
@@ -41,16 +42,16 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
                 } else {
                     "user/repos?type=owner&sort=pushed&per_page=100".into()
                 };
-                let repos: Page<Repository> = client.get::<_, _, ()>(path, None).await?;
-                Ok(repos)
+                let items: Page<_> = client.get::<_, _, ()>(path, None).await?;
+                Ok(items)
             }
-        }));
-        repos.boxed_local()
+        });
+        items.boxed_local()
     }
 
     fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<Repository, Error>> {
         let this = self.clone();
-        let repos = unpage(Box::new(move |page_num| {
+        let items = unpage(move |page_num| {
             let client = this.client.clone();
             async move {
                 let path: Cow<_> = if let Some(page_num) = page_num {
@@ -58,33 +59,50 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
                 } else {
                     "user/starred?sort=updated&per_page=100".into()
                 };
-                let repos: Page<Repository> = client.get::<_, _, ()>(path, None).await?;
-                Ok(repos)
+                let items: Page<_> = client.get::<_, _, ()>(path, None).await?;
+                Ok(items)
             }
-        }));
-        repos.boxed_local()
+        });
+        items.boxed_local()
     }
 
-    fn list_repository_commits(
+    fn list_repository_commits<'b>(
         &'a self,
-        repo_id: RepositoryId,
-    ) -> LocalBoxStream<'a, Result<GitHubCommit, Error>> {
-        let this = self.clone();
-        let repos = unpage(Box::new(move |page_num| {
-            let client = this.client.clone();
-            let repo_id = repo_id.clone();
-            async move {
-                let RepositoryId { owner, name } = repo_id;
-                let path = if let Some(page_num) = page_num {
-                    format!("repos/{owner}/{name}/commits?page={page_num}")
-                } else {
-                    format!("repos/{owner}/{name}/commits?sort=updated")
-                };
-                let repos: Page<GitHubCommit> = client.get::<_, _, ()>(path, None).await?;
-                Ok(repos)
-            }
-        }));
-        repos.boxed_local()
+        repo_id: &'b RepositoryId,
+    ) -> LocalBoxStream<'b, Result<GitHubCommit, Error>>
+    where
+        'a: 'b,
+    {
+        let items = unpage(move |page_num| async move {
+            let RepositoryId { owner, name } = repo_id;
+            let path = if let Some(page_num) = page_num {
+                format!("repos/{owner}/{name}/commits?per_page=100&page={page_num}")
+            } else {
+                format!("repos/{owner}/{name}/commits?per_page=100")
+            };
+            let items: Page<_> = self.client.get::<_, _, ()>(path, None).await?;
+            Ok(items)
+        });
+        items.boxed_local()
+    }
+
+    async fn get_check_runs_for_gitref<'b>(
+        &'a self,
+        repo_id: &'b RepositoryId,
+        gitref: &'b str,
+    ) -> Result<Vec<CheckRun>, Error>
+    where
+        'a: 'b,
+    {
+        let RepositoryId { owner, name } = repo_id;
+        let path = format!("repos/{owner}/{name}/commits/{gitref}/check-runs?per_page=100");
+
+        #[derive(Deserialize)]
+        struct Envelope {
+            check_runs: Vec<CheckRun>,
+        }
+        let res: Envelope = self.client.get::<_, _, ()>(path, None).await?;
+        Ok(res.check_runs)
     }
 
     async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<Repository, Error> {
@@ -109,19 +127,24 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
         client.repos(repo_id.owner, repo_id.name).delete().await?;
         Ok(())
     }
+
+    async fn fork_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error> {
+        let client = &self.client;
+        client.repos(repo_id.owner, repo_id.name).create_fork().send().await?;
+        Ok(())
+    }
 }
 
-fn unpage<'a, T, F>(
-    factory: Box<dyn Fn(Option<u8>) -> F>,
-) -> impl Stream<Item = Result<T, Error>> + 'a
+fn unpage<'a, T, F, Fut>(factory: F) -> impl Stream<Item = Result<T, Error>> + 'a
 where
-    T: 'a + Send,
-    F: 'a + Future<Output = Result<Page<T>, Error>>,
+    T: Send + 'static,
+    F: Fn(Option<u8>) -> Fut + 'a,
+    Fut: Future<Output = Result<Page<T>, Error>> + 'a,
 {
     try_stream! {
         let mut page_num = None;
         loop {
-            let req = (factory)(page_num);
+            let req = factory(page_num);
             let page = req.await?;
             let has_next = page.next.is_some();
             for repo in page {

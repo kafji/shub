@@ -145,12 +145,10 @@ where
         repos
             .and_then(|repo| async {
                 let repo_id = repo.get_repository_id()?;
-                let commits: Vec<_> = self
-                    .github_client
-                    .list_repository_commits(repo_id)
-                    .take(1)
-                    .try_collect()
-                    .await?;
+                let commits: Vec<_> = {
+                    let commits = self.github_client.list_repository_commits(&repo_id);
+                    commits.take(1).try_collect().await?
+                };
                 let commit = commits.first().map(ToOwned::to_owned);
                 Ok(OwnedRepository(repo, commit))
             })
@@ -162,9 +160,8 @@ where
         Ok(())
     }
 
-    pub async fn fork_repository(&self, repo_id: RepositoryId) -> Result<(), Error> {
-        let client = create_client()?;
-        client.repos(&repo_id.owner, &repo_id.name).create_fork().send().await?;
+    pub async fn fork_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error> {
+        self.github_client.fork_repository(repo_id).await?;
         Ok(())
     }
 
@@ -218,6 +215,29 @@ where
         let repo = self.github_client.get_repository(repo_id.clone()).await?;
         ensure!(repo.fork.unwrap_or_default());
         self.github_client.delete_repository(repo_id).await?;
+        Ok(())
+    }
+
+    pub async fn check_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
+        let repo_id = repo_id.complete(self.github_username);
+        println!("{repo_id}\n/----------");
+
+        let repo = self.github_client.get_repository(repo_id.clone()).await?;
+        let commit = {
+            let commits: Vec<_> = {
+                let commits = self.github_client.list_repository_commits(&repo_id);
+                commits.take(1).try_collect().await?
+            };
+            commits.first().map(ToOwned::to_owned)
+        };
+        let commit = commit.unwrap();
+        println!("{}\n{}\n/----------", commit.sha, commit.commit.message);
+
+        let checks = self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
+        for c in checks {
+            println!("{}: {}", c.name, c.conclusion);
+        }
+
         Ok(())
     }
 }
@@ -335,6 +355,7 @@ fn create_client() -> Result<Octocrab, Error> {
 
 #[derive(Deserialize, PartialEq, Clone, Debug)]
 pub struct GitHubCommit {
+    pub sha: String,
     pub commit: GitHubCommitDetail,
     pub author: Option<GitHubCommitActor>,
     pub committer: Option<GitHubCommitActor>,
@@ -349,8 +370,25 @@ pub struct GitHubCommitDetail {
 #[non_exhaustive]
 pub struct GitHubCommitActor {
     pub login: String,
-    pub id: u32,
+    pub id: u64,
     pub r#type: String,
+}
+
+#[derive(Deserialize, PartialEq, Clone, Debug)]
+pub struct CheckRun {
+    pub id: u64,
+    pub head_sha: String,
+    pub status: String,
+    pub conclusion: String,
+    pub output: Option<CheckRunOutput>,
+    pub name: String,
+}
+
+#[derive(Deserialize, PartialEq, Clone, Debug)]
+pub struct CheckRunOutput {
+    pub title: Option<String>,
+    pub summary: Option<String>,
+    pub text: Option<String>,
 }
 
 #[async_trait]
@@ -359,12 +397,26 @@ pub trait GitHubClient<'a> {
 
     fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<GitHubRepository, Error>>;
 
-    fn list_repository_commits(
+    /// https://docs.github.com/en/rest/reference/commits#list-commits
+    fn list_repository_commits<'b>(
         &'a self,
-        repo_id: RepositoryId,
-    ) -> LocalBoxStream<'a, Result<GitHubCommit, Error>>;
+        repo_id: &'b RepositoryId,
+    ) -> LocalBoxStream<'b, Result<GitHubCommit, Error>>
+    where
+        'a: 'b;
+
+    /// https://docs.github.com/en/rest/reference/checks#list-check-runs-for-a-git-reference
+    async fn get_check_runs_for_gitref<'b>(
+        &'a self,
+        repo_id: &'b RepositoryId,
+        gitref: &'b str,
+    ) -> Result<Vec<CheckRun>, Error>
+    where
+        'a: 'b;
 
     async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<GitHubRepository, Error>;
 
     async fn delete_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error>;
+
+    async fn fork_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error>;
 }
