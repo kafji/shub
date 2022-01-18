@@ -272,6 +272,10 @@ where
         loop {
             let checks =
                 self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
+            if checks.is_empty() {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                continue;
+            }
             for c in &checks {
                 writeln!(
                     stdout,
