@@ -71,8 +71,6 @@ where
         let get_settings = |repo_id: RepositoryId| {
             let client = client.clone();
             let RepositoryId { owner, name } = repo_id;
-            let owner = owner.to_owned();
-            let name = name.to_owned();
             async move {
                 let repo = client.repos(owner, name).get().await?;
                 let settings = repo.extract_repository_settings()?;
@@ -130,8 +128,7 @@ where
                 bail!("Repository {repo_id} is not a fork.")
             }
             repo.parent
-                .map(|x| x.html_url)
-                .flatten()
+                .and_then(|x| x.html_url)
                 .expect("Forked repository should have the HTML URL to its parent repository.")
         } else {
             repo.html_url.expect("Repository should have the HTML URL to itself.")

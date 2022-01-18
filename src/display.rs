@@ -74,8 +74,7 @@ where
 {
     fn relative_from_now(&self) -> Since {
         let duration = Utc::now().signed_duration_since(self.clone());
-        let since = Since(duration);
-        since
+        Since(duration)
     }
 }
 
@@ -158,7 +157,7 @@ struct RepositoryDescription<'a>(&'a str, usize);
 
 impl<'a> RepositoryDescription<'a> {
     fn from_repository(repository: &'a Repository, length: usize) -> Self {
-        let desc = repository.description.as_ref().map(|x| x.as_str()).unwrap_or_default();
+        let desc = repository.description.as_deref().unwrap_or_default();
         Self(desc, length)
     }
 }
@@ -182,14 +181,14 @@ impl fmt::Display for OwnedRepository {
         let name: RepositoryName = repo.into();
         write!(f, "{}", name)?;
 
-        let desc = RepositoryDescription::from_repository(&repo, 30);
+        let desc = RepositoryDescription::from_repository(repo, 30);
         write!(f, " | {}", &desc.to_string())?;
 
         let pushed = repo
             .pushed_at
             .as_ref()
             .map(|x| x.relative_from_now().to_string())
-            .map(|x| Cow::Owned(x))
+            .map(Cow::Owned)
             .unwrap_or_default();
         write_col!(, f, PUSHED_AT_LEN, &pushed)?;
 
@@ -197,7 +196,7 @@ impl fmt::Display for OwnedRepository {
             commit.as_ref().map(|x| &x.commit).map(|x| x.message.as_str()).unwrap_or_default();
         write_col!(, f, COMMIT_MSG_LEN, last_commit)?;
 
-        let lang = repo.language.as_ref().map(|x| x.as_str()).flatten().unwrap_or_default();
+        let lang = repo.language.as_ref().and_then(|x| x.as_str()).unwrap_or_default();
         write_col!(, f, LANG_NAME_LEN, lang, )?;
 
         let attrs: RepositoryAttrs = repo.into();
@@ -214,7 +213,7 @@ impl fmt::Display for StarredRepository {
         let name: RepositoryName = repo.into();
         write!(f, "{}", name)?;
 
-        let desc = RepositoryDescription::from_repository(&repo, 60);
+        let desc = RepositoryDescription::from_repository(repo, 60);
         write!(f, " | {}", &desc.to_string())?;
 
         let owner = repo.owner.as_ref().map(|x| x.login.as_str()).unwrap_or_default();
@@ -224,14 +223,14 @@ impl fmt::Display for StarredRepository {
             .pushed_at
             .as_ref()
             .map(|x| x.relative_from_now().to_string())
-            .map(|x| Cow::Owned(x))
+            .map(Cow::Owned)
             .unwrap_or_default();
         write_col!(, f, PUSHED_AT_LEN, &pushed)?;
 
         let issues_count = repo.open_issues_count.unwrap_or_default();
         write_col!(, f, 5, &issues_count.to_string())?;
 
-        let lang = repo.language.as_ref().map(|x| x.as_str()).flatten().unwrap_or_default();
+        let lang = repo.language.as_ref().and_then(|x| x.as_str()).unwrap_or_default();
         write_col!(, f, LANG_NAME_LEN, lang, )?;
 
         let attrs: RepositoryAttrs = repo.into();
