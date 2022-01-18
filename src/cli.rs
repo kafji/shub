@@ -15,6 +15,11 @@ pub enum Commands {
         #[clap(subcommand)]
         cmd: self::repos::Commands,
     },
+    /// Alias for repos.
+    R {
+        #[clap(subcommand)]
+        cmd: self::repos::Commands,
+    },
     /// Stars related operations.
     Stars {
         #[clap(subcommand)]

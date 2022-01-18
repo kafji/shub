@@ -34,7 +34,7 @@ async fn main() -> Result<(), Error> {
     let app = App::new(cfg)?;
 
     match cmd.cmd {
-        Commands::Repos { cmd } => match cmd {
+        Commands::Repos { cmd } | Commands::R { cmd } => match cmd {
             repos::Commands::Ls {} => app.list_owned_repositories().await?,
             repos::Commands::Open { repo, upstream } => app.open_repository(repo, upstream).await?,
             repos::Commands::Settings { cmd } => match cmd {
