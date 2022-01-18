@@ -1,15 +1,12 @@
-use crate::{
-    app::{CheckRun, GitHubClient, GitHubCommit},
-    RepositoryId, Secret,
-};
+use crate::{app::GitHubClient, github_models::*, RepositoryId, Secret};
 use anyhow::{bail, Error};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use futures::{stream::LocalBoxStream, Future, Stream, StreamExt};
 use http::header::HeaderName;
-use octocrab::{models::Repository, Octocrab, Page};
+use octocrab::{Octocrab, Page};
 use serde::Deserialize;
-use std::{borrow::Cow, env, sync::Arc};
+use std::{borrow::Cow, env};
 
 #[derive(Clone, Debug)]
 pub struct GitHubClientImpl {
@@ -32,7 +29,7 @@ impl GitHubClientImpl {
 
 #[async_trait]
 impl<'a> GitHubClient<'a> for GitHubClientImpl {
-    fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<Repository, Error>> {
+    fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>> {
         let this = self.clone();
         let items = unpage(move |page_num| {
             let client = this.client.clone();
@@ -49,7 +46,7 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
         items.boxed_local()
     }
 
-    fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<Repository, Error>> {
+    fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>> {
         let this = self.clone();
         let items = unpage(move |page_num| {
             let client = this.client.clone();
@@ -69,7 +66,7 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
     fn list_repository_commits<'b>(
         &'a self,
         repo_id: &'b RepositoryId,
-    ) -> LocalBoxStream<'b, Result<GitHubCommit, Error>>
+    ) -> LocalBoxStream<'b, Result<GhCommit, Error>>
     where
         'a: 'b,
     {
@@ -90,7 +87,7 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
         &'a self,
         repo_id: &'b RepositoryId,
         gitref: &'b str,
-    ) -> Result<Vec<CheckRun>, Error>
+    ) -> Result<Vec<GhCheckRun>, Error>
     where
         'a: 'b,
     {
@@ -99,13 +96,13 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
 
         #[derive(Deserialize)]
         struct Envelope {
-            check_runs: Vec<CheckRun>,
+            check_runs: Vec<GhCheckRun>,
         }
         let res: Envelope = self.client.get::<_, _, ()>(path, None).await?;
         Ok(res.check_runs)
     }
 
-    async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<Repository, Error> {
+    async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<GhRepository, Error> {
         let client = &self.client;
         let repo = client.repos(&repo_id.owner, &repo_id.name).get().await;
         let repo = match repo {

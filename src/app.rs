@@ -1,22 +1,22 @@
 use crate::{
-    github::GitHubClientImpl, local_repository_path, GetRepositoryId, OwnedRepository,
-    PartialRepositoryId, RepositoryId, Secret, StarredRepository,
+    github_client::GitHubClientImpl,
+    github_models::{GhCheckRun, GhCommit, GhRepository},
+    local_repository_path, GetRepositoryId, OwnedRepository, PartialRepositoryId, RepositoryId,
+    Secret, StarredRepository,
 };
 use anyhow::{bail, ensure, Context, Error, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use dialoguer::Confirm;
 use futures::{
     future,
-    stream::{LocalBoxStream, TryStreamExt},
-    StreamExt,
+    stream::{LocalBoxStream, StreamExt, TryStreamExt},
 };
 use git2::{build::RepoBuilder, Cred, FetchOptions, RemoteCallbacks};
 use http::header::HeaderName;
 use indoc::formatdoc;
-use octocrab::{models::Repository as GitHubRepository, Octocrab};
+use octocrab::Octocrab;
 use serde::{Deserialize, Serialize};
-use std::{env, fmt, path::Path, process::Command};
+use std::{borrow::Cow, env, fmt, path::Path, process::Command};
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct AppConfig<'a> {
@@ -37,7 +37,7 @@ impl<'a> App<'a, GitHubClientImpl> {
         AppConfig { github_username, github_token, workspace_root_dir }: AppConfig<'a>,
     ) -> Result<Self, Error> {
         let github_client =
-            crate::github::GitHubClientImpl::new(github_token.map(ToOwned::to_owned))?;
+            crate::github_client::GitHubClientImpl::new(github_token.map(ToOwned::to_owned))?;
         let s = Self { github_username, workspace_root_dir, github_client };
         Ok(s)
     }
@@ -96,7 +96,7 @@ where
             return Ok(());
         }
 
-        let _: GitHubRepository = {
+        let _: () = {
             let RepositoryId { owner, name } = to;
             client.patch(format!("repos/{owner}/{name}"), Some(&new_settings)).await?
         };
@@ -223,7 +223,6 @@ where
         let repo_id = repo_id.complete(self.github_username);
         println!("{repo_id}\n/----------");
 
-        let repo = self.github_client.get_repository(repo_id.clone()).await?;
         let commit = {
             let commits: Vec<_> = {
                 let commits = self.github_client.list_repository_commits(&repo_id);
@@ -232,7 +231,19 @@ where
             commits.first().map(ToOwned::to_owned)
         };
         let commit = commit.unwrap();
-        println!("{}\n{}\n/----------", commit.sha, commit.commit.message);
+        let commit_author = {
+            let mut buf = String::new();
+            let author = &commit.commit.author;
+            buf.extend(author.name.as_ref().map(Cow::Borrowed).unwrap_or_default().chars());
+            buf.push('<');
+            buf.extend(author.email.as_ref().map(Cow::Borrowed).unwrap_or_default().chars());
+            buf.push('>');
+            buf
+        };
+        println!(
+            "{commit_author} at {}\n{}\n{}\n/----------",
+            commit.commit.author.date, commit.sha, commit.commit.message
+        );
 
         let checks = self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
         for c in checks {
@@ -302,7 +313,7 @@ macro_rules! extract_key {
     };
 }
 
-impl ExtractRepositorySettings for GitHubRepository {
+impl ExtractRepositorySettings for GhRepository {
     fn extract_repository_settings(&self) -> Result<RepositorySettings, Error> {
         let repo = self;
         let s = RepositorySettings {
@@ -359,57 +370,17 @@ fn create_client() -> Result<Octocrab, Error> {
     Ok(client)
 }
 
-#[derive(Deserialize, PartialEq, Clone, Debug)]
-pub struct GitHubCommit {
-    pub sha: String,
-    pub commit: GitHubCommitDetail,
-    pub author: Option<GitHubCommitActor>,
-    pub committer: Option<GitHubCommitActor>,
-}
-
-#[derive(Deserialize, PartialEq, Clone, Debug)]
-pub struct GitHubCommitDetail {
-    pub message: String,
-}
-
-#[derive(Deserialize, PartialEq, Clone, Debug)]
-#[non_exhaustive]
-pub struct GitHubCommitActor {
-    pub login: String,
-    pub id: u64,
-    pub r#type: String,
-}
-
-#[derive(Deserialize, PartialEq, Clone, Debug)]
-pub struct CheckRun {
-    pub id: u64,
-    pub head_sha: String,
-    pub status: String,
-    pub conclusion: Option<String>,
-    pub started_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub output: Option<CheckRunOutput>,
-    pub name: String,
-}
-
-#[derive(Deserialize, PartialEq, Clone, Debug)]
-pub struct CheckRunOutput {
-    pub title: Option<String>,
-    pub summary: Option<String>,
-    pub text: Option<String>,
-}
-
 #[async_trait]
 pub trait GitHubClient<'a> {
-    fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<GitHubRepository, Error>>;
+    fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>>;
 
-    fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<GitHubRepository, Error>>;
+    fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>>;
 
     /// https://docs.github.com/en/rest/reference/commits#list-commits
     fn list_repository_commits<'b>(
         &'a self,
         repo_id: &'b RepositoryId,
-    ) -> LocalBoxStream<'b, Result<GitHubCommit, Error>>
+    ) -> LocalBoxStream<'b, Result<GhCommit, Error>>
     where
         'a: 'b;
 
@@ -418,11 +389,11 @@ pub trait GitHubClient<'a> {
         &'a self,
         repo_id: &'b RepositoryId,
         gitref: &'b str,
-    ) -> Result<Vec<CheckRun>, Error>
+    ) -> Result<Vec<GhCheckRun>, Error>
     where
         'a: 'b;
 
-    async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<GitHubRepository, Error>;
+    async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<GhRepository, Error>;
 
     async fn delete_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error>;
 

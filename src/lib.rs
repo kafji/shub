@@ -1,12 +1,12 @@
 mod display;
-mod github;
+mod github_client;
+mod github_models;
 
 pub mod app;
 
+use crate::github_models::{GhCommit, GhRepository};
 use anyhow::{bail, Error};
-use app::GitHubCommit;
 use core::fmt;
-use octocrab::models::Repository;
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
@@ -16,7 +16,7 @@ trait GetRepositoryId {
     fn get_repository_id(&self) -> Result<RepositoryId, Error>;
 }
 
-impl GetRepositoryId for Repository {
+impl GetRepositoryId for GhRepository {
     fn get_repository_id(&self) -> Result<RepositoryId, Error> {
         let owner = self.owner.as_ref().unwrap().login.clone();
         let name = self.name.clone();
@@ -229,7 +229,7 @@ fn test_local_repository_path() {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-struct StarredRepository(Repository);
+struct StarredRepository(GhRepository);
 
 #[derive(PartialEq, Clone, Debug)]
-struct OwnedRepository(Repository, Option<GitHubCommit>);
+struct OwnedRepository(GhRepository, Option<GhCommit>);
