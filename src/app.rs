@@ -7,6 +7,7 @@ use crate::{
 };
 use anyhow::{bail, ensure, Context, Error, Result};
 use async_trait::async_trait;
+use console::Term;
 use dialoguer::Confirm;
 use futures::{
     future,
@@ -17,7 +18,7 @@ use http::header::HeaderName;
 use indoc::formatdoc;
 use octocrab::Octocrab;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, env, fmt, path::Path, process::Command};
+use std::{borrow::Cow, env, fmt, io::Write, path::Path, process::Command, time::Duration};
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct AppConfig<'a> {
@@ -220,6 +221,7 @@ where
     pub async fn check_repository(
         &'a self,
         repo_id: Option<PartialRepositoryId>,
+        wait_completion: bool,
     ) -> Result<(), Error> {
         let repo_id = match repo_id {
             Some(repo_id) => repo_id.complete(self.github_username),
@@ -260,14 +262,32 @@ where
             commit.commit.message
         );
 
-        let checks = self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
-        for c in checks {
-            println!(
-                "{}: {} - {}",
-                c.name,
-                kceh::snake_case_to_statement(c.conclusion.unwrap_or(c.status)),
-                c.completed_at.unwrap_or(c.started_at).relative_from_now()
-            );
+        {
+            let mut stdout = Term::stdout();
+            loop {
+                let checks =
+                    self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
+
+                for c in &checks {
+                    writeln!(
+                        stdout,
+                        "{}: {} - {}",
+                        c.name,
+                        kceh::snake_case_to_statement(c.conclusion.as_deref().unwrap_or(&c.status)),
+                        c.completed_at.unwrap_or(c.started_at).relative_from_now()
+                    )?;
+                }
+
+                let completed = checks.iter().map(|x| x.completed_at.is_some()).all(|x| x);
+
+                if !wait_completion || completed {
+                    break;
+                }
+
+                tokio::time::sleep(Duration::from_secs(60)).await;
+
+                stdout.clear_last_lines(checks.len())?;
+            }
         }
 
         Ok(())

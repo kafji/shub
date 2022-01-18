@@ -77,6 +77,10 @@ pub mod repos {
         Status {
             /// Repository identifier.
             repo: Option<PartialRepositoryId>,
+
+            /// Wait for runs completion.
+            #[clap(long, short)]
+            wait: bool,
         },
     }
 
