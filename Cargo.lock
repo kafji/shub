@@ -1295,6 +1295,7 @@ dependencies = [
  "quickcheck",
  "quickcheck_macros",
  "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tokio-stream",

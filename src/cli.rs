@@ -5,30 +5,35 @@ use shub::{PartialRepositoryId, RepositoryId};
 #[clap(author, version, about)]
 pub struct Cli {
     #[clap(subcommand)]
-    pub cmd: Commands,
+    pub cmd: Command,
 }
 
 #[derive(Subcommand, Debug)]
-pub enum Commands {
+pub enum Command {
     /// Repository related operations.
     Repos {
         #[clap(subcommand)]
-        cmd: self::repos::Commands,
+        cmd: self::repos::Command,
     },
     /// Alias for repos.
     R {
         #[clap(subcommand)]
-        cmd: self::repos::Commands,
+        cmd: self::repos::Command,
     },
     /// Stars related operations.
     Stars {
         #[clap(subcommand)]
-        cmd: self::stars::Commands,
+        cmd: self::stars::Command,
+    },
+    /// Alias for stars.
+    S {
+        #[clap(subcommand)]
+        cmd: self::stars::Command,
     },
     /// Workspace operations.
     Workspace {
         #[clap(subcommand)]
-        cmd: self::workspace::Commands,
+        cmd: self::workspace::Command,
     },
 }
 
@@ -36,7 +41,7 @@ pub mod repos {
     use super::*;
 
     #[derive(Subcommand, Debug)]
-    pub enum Commands {
+    pub enum Command {
         /// Print list of owned repositories.
         Ls {},
         /// Open repository.
@@ -51,7 +56,7 @@ pub mod repos {
         /// Repository settings operation.
         Settings {
             #[clap(subcommand)]
-            cmd: self::settings::Commands,
+            cmd: self::settings::Command,
         },
         /// Fork repository.
         Fork {
@@ -84,7 +89,7 @@ pub mod repos {
         use super::*;
 
         #[derive(Subcommand, Debug)]
-        pub enum Commands {
+        pub enum Command {
             /// Print repository settings.
             View {
                 /// Repository identifier.
@@ -107,7 +112,7 @@ pub mod stars {
     use super::*;
 
     #[derive(Subcommand, Debug)]
-    pub enum Commands {
+    pub enum Command {
         /// Print list of starred repositories.
         Ls {},
 
@@ -123,7 +128,7 @@ pub mod workspace {
     use super::*;
 
     #[derive(Subcommand, Debug)]
-    pub enum Commands {
+    pub enum Command {
         /// Print list of projects under specified namespace.
         Ls { namespace: String },
 

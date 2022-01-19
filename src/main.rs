@@ -34,29 +34,29 @@ async fn main() -> Result<(), Error> {
     let app = App::new(cfg)?;
 
     match cmd.cmd {
-        Commands::Repos { cmd } | Commands::R { cmd } => match cmd {
-            repos::Commands::Ls {} => app.list_owned_repositories().await?,
-            repos::Commands::Open { repo, upstream } => app.open_repository(repo, upstream).await?,
-            repos::Commands::Settings { cmd } => match cmd {
-                repos::settings::Commands::View { repo } => {
+        Command::Repos { cmd } | Command::R { cmd } => match cmd {
+            repos::Command::Ls {} => app.list_owned_repositories().await?,
+            repos::Command::Open { repo, upstream } => app.open_repository(repo, upstream).await?,
+            repos::Command::Settings { cmd } => match cmd {
+                repos::settings::Command::View { repo } => {
                     app.view_repository_settings(repo).await?
                 }
-                repos::settings::Commands::Apply { from, to } => {
+                repos::settings::Command::Apply { from, to } => {
                     app.apply_repository_settings(from, to).await?
                 }
             },
-            repos::Commands::Fork { repo } => app.fork_repository(repo).await?,
-            repos::Commands::Clone { repo } => app.clone_repository(repo).await?,
-            repos::Commands::Create { repo } => todo!(),
-            repos::Commands::Delete { repo } => app.delete_repository(repo).await?,
-            repos::Commands::Status { repo } => app.check_repository(repo).await?,
+            repos::Command::Fork { repo } => app.fork_repository(repo).await?,
+            repos::Command::Clone { repo } => app.clone_repository(repo).await?,
+            repos::Command::Create { repo } => todo!(),
+            repos::Command::Delete { repo } => app.delete_repository(repo).await?,
+            repos::Command::Status { repo } => app.check_repository(repo).await?,
         },
-        Commands::Stars { cmd } => match cmd {
-            stars::Commands::Ls {} => app.list_starred_repositories().await?,
-            stars::Commands::Star { repo } => todo!(),
-            stars::Commands::Unstar { repo } => todo!(),
+        Command::Stars { cmd } | Command::S { cmd } => match cmd {
+            stars::Command::Ls {} => app.list_starred_repositories().await?,
+            stars::Command::Star { repo } => todo!(),
+            stars::Command::Unstar { repo } => todo!(),
         },
-        Commands::Workspace { cmd } => todo!(),
+        Command::Workspace { cmd } => todo!(),
     };
 
     debug!("Exit.");

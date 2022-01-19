@@ -18,7 +18,11 @@ use http::header::HeaderName;
 use indoc::formatdoc;
 use octocrab::Octocrab;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, env, fmt, io::Write, path::Path, process::Command, time::Duration};
+use serde_json::Value;
+use std::{
+    borrow::Cow, collections::HashMap, env, fmt, io::Write, path::Path, process::Command,
+    time::Duration,
+};
 use tokio::task;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -97,7 +101,7 @@ where
             return Ok(());
         }
 
-        let _: () = {
+        let _: HashMap<String, Value> = {
             let RepositoryId { owner, name } = to;
             client.patch(format!("repos/{owner}/{name}"), Some(&new_settings)).await?
         };
