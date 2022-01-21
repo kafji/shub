@@ -423,6 +423,7 @@ fn create_client() -> Result<Octocrab, Error> {
 
 #[async_trait]
 pub trait GitHubClient<'a> {
+    /// https://docs.github.com/en/rest/reference/repos#list-repositories-for-the-authenticated-user
     fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>>;
 
     fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>>;
