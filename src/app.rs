@@ -177,8 +177,6 @@ where
     pub async fn clone_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
         let repo_id = repo_id.complete(self.github_username);
 
-        ensure!(repo_id.owner == self.github_username);
-
         let repo_info = self.github_client.get_repository(repo_id.clone()).await?;
 
         let ssh_url = repo_info
