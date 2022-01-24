@@ -1,17 +1,20 @@
 mod display;
 mod github_client;
-mod kceh;
 mod github_models;
+mod kceh;
 
 pub mod app;
 
 use crate::github_models::{GhCommit, GhRepository};
 use anyhow::{bail, Error};
+use bytes::BytesMut;
 use core::fmt;
+use futures::stream::BoxStream;
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
+use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 
 trait GetRepositoryId {
     fn get_repository_id(&self) -> Result<RepositoryId, Error>;
@@ -217,15 +220,25 @@ fn test_print_secret() {
     assert!(!format!("{secret:#?}").contains("sekret"));
 }
 
-fn local_repository_path(workspace_dir: impl AsRef<Path>, repo_id: &RepositoryId) -> PathBuf {
-    workspace_dir.as_ref().to_path_buf().join(&repo_id.owner).join(&repo_id.name)
+fn create_namespaced_workspace_path(
+    workspace_root_dir: impl AsRef<Path>,
+    namespace: &str,
+) -> PathBuf {
+    workspace_root_dir.as_ref().to_path_buf().join(namespace)
+}
+
+fn create_local_repository_path(
+    workspace_root_dir: impl AsRef<Path>,
+    repo_id: &RepositoryId,
+) -> PathBuf {
+    workspace_root_dir.as_ref().to_path_buf().join(&repo_id.owner).join(&repo_id.name)
 }
 
 #[cfg(test)]
 #[test]
 fn test_local_repository_path() {
     let workspace = "./workspace";
-    let path = local_repository_path(workspace, &RepositoryId::new("kafji", "shub"));
+    let path = create_local_repository_path(workspace, &RepositoryId::new("kafji", "shub"));
     assert_eq!(path.display().to_string(), "./workspace/kafji/shub");
 }
 
