@@ -30,6 +30,11 @@ pub enum Command {
         #[clap(subcommand)]
         cmd: self::stars::Command,
     },
+    /// Tasks operations.
+    Tasks {
+        #[clap(subcommand)]
+        cmd: self::tasks::Command,
+    },
     /// Workspace operations.
     Workspace {
         #[clap(subcommand)]
@@ -121,6 +126,16 @@ pub mod stars {
 
         /// Unstar a starred repository.
         Unstar { repo: RepositoryId },
+    }
+}
+
+pub mod tasks {
+    use super::*;
+
+    #[derive(Subcommand, Debug)]
+    pub enum Command {
+        /// Print list of issues and pull requests.
+        Ls {},
     }
 }
 
