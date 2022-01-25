@@ -1,12 +1,15 @@
 use crate::{
+    create_local_repository_path, create_namespaced_workspace_path,
     display::RelativeFromNow,
     github_client::GitHubClientImpl,
     github_models::{GhCheckRun, GhCommit, GhRepository},
-    kceh, local_repository_path, GetRepositoryId, OwnedRepository, PartialRepositoryId,
-    RepositoryId, Secret, StarredRepository,
+    kceh, GetRepositoryId, OwnedRepository, PartialRepositoryId, RepositoryId, Secret,
+    StarredRepository,
 };
 use anyhow::{bail, ensure, Context, Error, Result};
+use async_stream::stream;
 use async_trait::async_trait;
+use bytes::{Bytes, BytesMut};
 use console::Term;
 use dialoguer::Confirm;
 use futures::{
@@ -23,7 +26,11 @@ use std::{
     borrow::Cow, collections::HashMap, env, fmt, io::Write, path::Path, process::Command,
     time::Duration,
 };
-use tokio::task;
+use tokio::{
+    io::{AsyncBufReadExt, AsyncReadExt, BufReader},
+    task,
+};
+use tokio_stream::wrappers::{LinesStream, ReadDirStream};
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct AppConfig<'a> {
@@ -128,7 +135,7 @@ where
     ) -> Result<(), Error> {
         let repo_id = match repo_id {
             Some(repo_id) => repo_id.complete(self.github_username),
-            None => repo_id_for_cwd().await?,
+            None => get_repo_id_for_cwd().await?,
         };
 
         let repo = self.github_client.get_repository(repo_id.clone()).await?;
@@ -194,7 +201,7 @@ where
         };
 
         let workspace_home = self.workspace_root_dir;
-        let path = local_repository_path(workspace_home, &repo_id);
+        let path = create_local_repository_path(workspace_home, &repo_id);
         println!("Cloning {repo_id} repository to {path}.", path = path.display());
         let repo = RepoBuilder::new()
             .fetch_options(create_fetch_options())
@@ -233,12 +240,12 @@ where
 
         let repo_id = match repo_id {
             Some(repo_id) => repo_id.complete(self.github_username),
-            None => repo_id_for_cwd().await?,
+            None => get_repo_id_for_cwd().await?,
         };
         writeln!(stdout, "{repo_id}")?;
         stdout.flush()?;
 
-        writeln!(stdout, "/----------")?;
+        writeln!(stdout, "----------")?;
 
         let commit = {
             let commits: Vec<_> = {
@@ -269,7 +276,7 @@ where
         )?;
         stdout.flush()?;
 
-        writeln!(stdout, "/----------")?;
+        writeln!(stdout, "----------")?;
 
         loop {
             let checks =
@@ -293,6 +300,57 @@ where
         }
 
         stdout.flush()?;
+        Ok(())
+    }
+
+    pub async fn list_projects(&self, namespace: &'a str) -> Result<(), Error> {
+        let path = create_namespaced_workspace_path(self.workspace_root_dir, namespace);
+        {
+            let meta = tokio::fs::metadata(&path).await?;
+            ensure!(meta.is_dir());
+        }
+
+        let workspace = {
+            let dir = tokio::fs::read_dir(path).await?;
+            ReadDirStream::new(dir)
+        };
+
+        workspace
+            .map_err(Error::new)
+            .and_then(|dir| async {
+                let readme = {
+                    let path = dir.path().join("README.md");
+                    if !path.exists() {
+                        return Ok((dir, None));
+                    }
+                    let file = tokio::fs::File::open(&path).await.with_context(|| {
+                        format!("Failed to read file at `{}`.", path.to_string_lossy())
+                    })?;
+                    BufReader::new(file)
+                };
+                let lines = LinesStream::new(readme.lines());
+                let desc: Option<String> = lines
+                    .and_then(|x| future::ok(x.trim().to_owned()))
+                    .try_filter(|x| future::ready(!x.is_empty()))
+                    .skip(1)
+                    .map_ok(|x| x.chars().take(80).collect())
+                    .next()
+                    .await
+                    .transpose()?;
+                Ok((dir, desc))
+            })
+            .try_for_each(|(dir, desc)| async move {
+                let name = dir.file_name();
+                let name = name.to_string_lossy();
+                print!("{name}");
+                if let Some(desc) = desc {
+                    print!("\t\t{desc}");
+                }
+                print!("\n");
+                Ok(())
+            })
+            .await?;
+
         Ok(())
     }
 }
@@ -396,7 +454,7 @@ impl fmt::Display for RepositorySettingsDiff<'_> {
     }
 }
 
-async fn repo_id_for_cwd() -> Result<RepositoryId, Error> {
+async fn get_repo_id_for_cwd() -> Result<RepositoryId, Error> {
     task::block_in_place(|| {
         let repo = git2::Repository::discover(".")?;
         let origin = repo.find_remote("origin")?;

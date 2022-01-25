@@ -57,7 +57,10 @@ async fn main() -> Result<(), Error> {
             stars::Command::Unstar { repo } => todo!(),
         },
         Command::Tasks { cmd } => todo!(),
-        Command::Workspace { cmd } => todo!(),
+        Command::Workspace { cmd } => match cmd {
+            workspace::Command::Ls { namespace } => app.list_projects(&namespace).await?,
+            workspace::Command::Namespaces {} => todo!(),
+        },
     };
 
     debug!("Exit.");
