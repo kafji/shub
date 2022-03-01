@@ -16,7 +16,7 @@ clap = { version = "3.1", default-features = false, features = [
   "cargo",
 ] }
 console = "0.15"
-dialoguer = "0.9"
+dialoguer = "0.10"
 fastrand = "1.7"
 futures = "0.3"
 git2 = "0.13"
