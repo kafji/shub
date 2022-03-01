@@ -5,33 +5,33 @@ edition = "2021"
 publish = false
 
 [dependencies]
-anyhow = "1"
+anyhow = "1.0"
 async-stream = "0.3"
 async-trait = "0.1"
-bytes = "1"
+bytes = "1.1"
 chrono = "0.4"
-clap = { version = "3", default-features = false, features = [
+clap = { version = "3.1", default-features = false, features = [
   "std",
   "derive",
   "cargo",
 ] }
 console = "0.15"
 dialoguer = "0.9"
-fastrand = "1"
+fastrand = "1.7"
 futures = "0.3"
 git2 = "0.13"
 http = "0.2"
-indoc = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tokio = { version = "1", features = ["full"] }
+indoc = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.17", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["fs", "io-util"] }
 toml = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-octocrab = { git = "https://github.com/XAMPPRocky/octocrab" }
+octocrab = "0.15"
 
 [dev-dependencies]
-quickcheck = "1"
-quickcheck_macros = "1"
-tempfile = "3"
+quickcheck = "1.0"
+quickcheck_macros = "1.0"
+tempfile = "3.3"
