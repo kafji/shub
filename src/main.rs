@@ -49,7 +49,7 @@ async fn main() -> Result<(), Error> {
         },
         Command::W { cmd } => match cmd {
             workspace::Command::Ls => app.list_projects().await?,
-            workspace::Command::Edit { name } => todo!(),
+            workspace::Command::Edit { name } => app.edit_project(&name).await?,
         },
     };
 

@@ -21,10 +21,17 @@ use sekret::Secret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
-    borrow::Cow, collections::HashMap, env, fmt, io::Write, path::Path, process::Command,
+    borrow::Cow,
+    collections::HashMap,
+    env, fmt,
+    io::Write,
+    os::unix::prelude::CommandExt,
+    path::{Path, PathBuf},
+    process::Command,
     time::Duration,
 };
 use tokio::{
+    fs,
     io::{AsyncBufReadExt, BufReader},
     task,
 };
@@ -40,8 +47,9 @@ pub struct AppConfig<'a> {
 #[derive(Debug)]
 pub struct App<'a, GitHubClient> {
     github_username: &'a str,
-    workspace_root_dir: &'a Path,
+    workspace_root_dir_path: &'a Path,
     github_client: GitHubClient,
+    my_workspace_dir_path: PathBuf,
 }
 
 impl<'a> App<'a, GitHubClientImpl> {
@@ -54,10 +62,12 @@ impl<'a> App<'a, GitHubClientImpl> {
     ) -> Result<Self, Error> {
         let github_client =
             crate::github_client::GitHubClientImpl::new(github_token.map(ToOwned::to_owned))?;
+        let my_workspace_dir_path = workspace_root_dir.join(github_username);
         let s = Self {
             github_username,
-            workspace_root_dir,
+            workspace_root_dir_path: workspace_root_dir,
             github_client,
+            my_workspace_dir_path,
         };
         Ok(s)
     }
@@ -180,7 +190,7 @@ where
             None => None,
         };
 
-        let workspace_home = self.workspace_root_dir;
+        let workspace_home = self.workspace_root_dir_path;
         let path = create_local_repository_path(workspace_home, &repo_id);
         println!(
             "Cloning {repo_id} repository to {path}.",
@@ -300,14 +310,15 @@ where
     }
 
     pub async fn list_projects(&self) -> Result<(), Error> {
-        let path = create_namespaced_workspace_path(self.workspace_root_dir, self.github_username);
+        let path =
+            create_namespaced_workspace_path(self.workspace_root_dir_path, self.github_username);
         {
-            let meta = tokio::fs::metadata(&path).await?;
+            let meta = fs::metadata(&path).await?;
             ensure!(meta.is_dir());
         }
 
         let workspace = {
-            let dir = tokio::fs::read_dir(path).await?;
+            let dir = fs::read_dir(path).await?;
             ReadDirStream::new(dir)
         };
 
@@ -319,7 +330,7 @@ where
                     if !path.exists() {
                         return Ok((dir, None));
                     }
-                    let file = tokio::fs::File::open(&path).await.with_context(|| {
+                    let file = fs::File::open(&path).await.with_context(|| {
                         format!("Failed to read file at `{}`.", path.to_string_lossy())
                     })?;
                     BufReader::new(file)
@@ -348,6 +359,31 @@ where
             .await?;
 
         Ok(())
+    }
+
+    pub async fn edit_project(&self, project_name: &str) -> Result<(), Error> {
+        let editor = env::var("SHUB_EDITOR")?;
+        let project = ReadDirStream::new(fs::read_dir(&self.my_workspace_dir_path).await?)
+            .try_filter_map(|entry| {
+                future::ok(Some(entry.path()).and_then(|x| if x.is_dir() { Some(x) } else { None }))
+            })
+            .try_filter(|path| {
+                future::ready(
+                    path.file_name()
+                        .and_then(|x| x.to_str())
+                        .map(|x| x == project_name)
+                        .unwrap_or_default(),
+                )
+            })
+            .try_next()
+            .await?;
+        match project {
+            Some(path) => {
+                let err = Command::new(editor).arg(path).exec();
+                Err(err.into())
+            }
+            None => bail!("project `{project_name}` does not exists"),
+        }
     }
 }
 
