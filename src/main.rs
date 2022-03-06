@@ -17,7 +17,7 @@ async fn main() -> Result<(), Error> {
         .with_thread_ids(true)
         .init();
 
-    let cmd = cmd();
+    let cmd = cli();
 
     let username = env::var("SHUB_USERNAME")?;
     let github_token = Secret(env::var("SHUB_TOKEN")?);
@@ -48,13 +48,14 @@ async fn main() -> Result<(), Error> {
             repos::Command::BuildStatus { repo } => app.check_repository(repo).await?,
         },
         Command::Stars { cmd } | Command::S { cmd } => match cmd {
-            stars::Command::Ls {} => app.list_starred_repositories().await?,
-            stars::Command::Star { repo } => todo!(),
-            stars::Command::Unstar { repo } => todo!(),
+            stars::Command::Ls => app.list_starred_repositories().await?,
         },
-        Command::Tasks { cmd } | Command::T { cmd } => todo!(),
-        Command::Workspace { cmd } => match cmd {
+        Command::Tasks { cmd } | Command::T { cmd } => match cmd {
+            tasks::Command::Ls => todo!(),
+        },
+        Command::Workspace { cmd } | Command::W { cmd } => match cmd {
             workspace::Command::Ls => app.list_projects().await?,
+            workspace::Command::Edit { name } => todo!(),
         },
     };
 

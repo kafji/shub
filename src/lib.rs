@@ -7,14 +7,11 @@ pub mod app;
 
 use crate::github_models::{GhCommit, GhRepository};
 use anyhow::{bail, Error};
-use bytes::BytesMut;
 use core::fmt;
-use futures::stream::BoxStream;
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 
 trait GetRepositoryId {
     fn get_repository_id(&self) -> Result<RepositoryId, Error>;
@@ -46,7 +43,10 @@ impl RepositoryId {
         PartialRepositoryId { owner, name }: PartialRepositoryId,
         default_owner: String,
     ) -> Self {
-        Self { owner: owner.unwrap_or(default_owner), name }
+        Self {
+            owner: owner.unwrap_or(default_owner),
+            name,
+        }
     }
 }
 
@@ -90,7 +90,10 @@ fn test_repository_id_display() {
 fn test_parse_repository_id() {
     // trivial case
     assert_eq!(
-        RepositoryId { owner: "kafji".to_owned().into(), name: "shub".to_owned() },
+        RepositoryId {
+            owner: "kafji".to_owned().into(),
+            name: "shub".to_owned()
+        },
         "kafji/shub".parse().unwrap()
     );
     // missing owner
@@ -105,7 +108,10 @@ fn test_parse_repository_id() {
     );
     // double separator
     assert_eq!(
-        RepositoryId { owner: "kafji".to_owned().into(), name: "sh/ub".to_owned() },
+        RepositoryId {
+            owner: "kafji".to_owned().into(),
+            name: "sh/ub".to_owned()
+        },
         "kafji/sh/ub".parse().unwrap()
     );
 }
@@ -137,7 +143,10 @@ impl FromStr for PartialRepositoryId {
                 let owner = s[..x].to_owned().into();
                 Self { owner, name }
             }
-            None => Self { owner: None, name: s.into() },
+            None => Self {
+                owner: None,
+                name: s.into(),
+            },
         };
         Ok(r)
     }
@@ -148,22 +157,34 @@ impl FromStr for PartialRepositoryId {
 fn test_parse_partial_repository_id() {
     // trivial case
     assert_eq!(
-        PartialRepositoryId { owner: "kafji".to_owned().into(), name: "shub".to_owned() },
+        PartialRepositoryId {
+            owner: "kafji".to_owned().into(),
+            name: "shub".to_owned()
+        },
         "kafji/shub".parse().unwrap()
     );
     // missing owner
     assert_eq!(
-        PartialRepositoryId { owner: None, name: "shub".to_owned() },
+        PartialRepositoryId {
+            owner: None,
+            name: "shub".to_owned()
+        },
         "shub".parse().unwrap()
     );
     // missing name
     assert_eq!(
         "Expecting in `:owner?/:name` format, but was `kafji/`.",
-        "kafji/".parse::<PartialRepositoryId>().unwrap_err().to_string()
+        "kafji/"
+            .parse::<PartialRepositoryId>()
+            .unwrap_err()
+            .to_string()
     );
     // double separator
     assert_eq!(
-        PartialRepositoryId { owner: "kafji".to_owned().into(), name: "sh/ub".to_owned() },
+        PartialRepositoryId {
+            owner: "kafji".to_owned().into(),
+            name: "sh/ub".to_owned()
+        },
         "kafji/sh/ub".parse().unwrap()
     );
 }
@@ -231,7 +252,11 @@ fn create_local_repository_path(
     workspace_root_dir: impl AsRef<Path>,
     repo_id: &RepositoryId,
 ) -> PathBuf {
-    workspace_root_dir.as_ref().to_path_buf().join(&repo_id.owner).join(&repo_id.name)
+    workspace_root_dir
+        .as_ref()
+        .to_path_buf()
+        .join(&repo_id.owner)
+        .join(&repo_id.name)
 }
 
 #[cfg(test)]

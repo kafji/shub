@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use shub::{PartialRepositoryId, RepositoryId};
+use shub::PartialRepositoryId;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -42,6 +42,11 @@ pub enum Command {
     },
     /// Workspace operations.
     Workspace {
+        #[clap(subcommand)]
+        cmd: workspace::Command,
+    },
+    /// Alias for workspace.
+    W {
         #[clap(subcommand)]
         cmd: workspace::Command,
     },
@@ -104,12 +109,6 @@ pub mod stars {
     pub enum Command {
         /// Print starred repositories.
         Ls,
-
-        /// Star an unstarred repository.
-        Star { repo: RepositoryId },
-
-        /// Unstar a starred repository.
-        Unstar { repo: RepositoryId },
     }
 }
 
@@ -130,9 +129,15 @@ pub mod workspace {
     pub enum Command {
         /// Print local projects.
         Ls,
+
+        /// Open editor to the specified project.
+        Edit {
+            /// Project name.
+            name: String,
+        },
     }
 }
 
-pub fn cmd() -> Cli {
+pub fn cli() -> Cli {
     Cli::parse()
 }
