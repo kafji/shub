@@ -49,14 +49,10 @@ pub mod repos {
     pub enum Command {
         /// Print list of owned repositories.
         Ls {},
-        /// Open repository.
-        Open {
+        /// Browse upstream repository of a fork.
+        BrowseUpstream {
             /// Repository identifier.
             repo: Option<PartialRepositoryId>,
-
-            /// Open the upstream repository.
-            #[clap(long)]
-            upstream: bool,
         },
         /// Repository settings operation.
         Settings {

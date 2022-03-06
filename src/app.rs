@@ -48,11 +48,19 @@ pub struct App<'a, GitHubClient> {
 
 impl<'a> App<'a, GitHubClientImpl> {
     pub fn new(
-        AppConfig { github_username, github_token, workspace_root_dir }: AppConfig<'a>,
+        AppConfig {
+            github_username,
+            github_token,
+            workspace_root_dir,
+        }: AppConfig<'a>,
     ) -> Result<Self, Error> {
         let github_client =
             crate::github_client::GitHubClientImpl::new(github_token.map(ToOwned::to_owned))?;
-        let s = Self { github_username, workspace_root_dir, github_client };
+        let s = Self {
+            github_username,
+            workspace_root_dir,
+            github_client,
+        };
         Ok(s)
     }
 }
@@ -110,7 +118,9 @@ where
 
         let _: HashMap<String, Value> = {
             let RepositoryId { owner, name } = to;
-            client.patch(format!("repos/{owner}/{name}"), Some(&new_settings)).await?
+            client
+                .patch(format!("repos/{owner}/{name}"), Some(&new_settings))
+                .await?
         };
 
         Ok(())
@@ -128,10 +138,9 @@ where
         Ok(())
     }
 
-    pub async fn open_repository(
+    pub async fn browse_upstream(
         &'a self,
         repo_id: Option<PartialRepositoryId>,
-        upstream: bool,
     ) -> Result<(), Error> {
         let repo_id = match repo_id {
             Some(repo_id) => repo_id.complete(self.github_username),
@@ -140,15 +149,13 @@ where
 
         let repo = self.github_client.get_repository(repo_id.clone()).await?;
 
-        let url = if upstream {
+        let url = {
             if !repo.fork.unwrap_or_default() {
                 bail!("Repository {repo_id} is not a fork.")
             }
             repo.parent
                 .and_then(|x| x.html_url)
                 .expect("Forked repository should have the HTML URL to its parent repository.")
-        } else {
-            repo.html_url.expect("Repository should have the HTML URL to itself.")
         };
 
         Command::new("xdg-open").arg(url.as_str()).status()?;
@@ -202,22 +209,30 @@ where
 
         let workspace_home = self.workspace_root_dir;
         let path = create_local_repository_path(workspace_home, &repo_id);
-        println!("Cloning {repo_id} repository to {path}.", path = path.display());
+        println!(
+            "Cloning {repo_id} repository to {path}.",
+            path = path.display()
+        );
         let repo = RepoBuilder::new()
             .fetch_options(create_fetch_options())
             .clone(&ssh_url, &path)
             .context("Failed to clone repository.")?;
 
         if let Some(upstream_url) = upstream_url {
-            let mut remote =
-                repo.remote("upstream", &upstream_url).context("Failed to add upstream remote.")?;
+            let mut remote = repo
+                .remote("upstream", &upstream_url)
+                .context("Failed to add upstream remote.")?;
             let mut options = {
                 let mut opts = create_fetch_options();
                 opts.prune(git2::FetchPrune::On);
                 opts
             };
             remote
-                .fetch(&["+refs/heads/*:refs/remotes/origin/*"], Some(&mut options), None)
+                .fetch(
+                    &["+refs/heads/*:refs/remotes/origin/*"],
+                    Some(&mut options),
+                    None,
+                )
                 .context("Failed to fetch upstream.")?;
         }
 
@@ -261,9 +276,23 @@ where
         let commit_author = {
             let mut buf = String::new();
             let author = &commit.commit.author;
-            buf.extend(author.name.as_ref().map(Cow::Borrowed).unwrap_or_default().chars());
+            buf.extend(
+                author
+                    .name
+                    .as_ref()
+                    .map(Cow::Borrowed)
+                    .unwrap_or_default()
+                    .chars(),
+            );
             buf.push('<');
-            buf.extend(author.email.as_ref().map(Cow::Borrowed).unwrap_or_default().chars());
+            buf.extend(
+                author
+                    .email
+                    .as_ref()
+                    .map(Cow::Borrowed)
+                    .unwrap_or_default()
+                    .chars(),
+            );
             buf.push('>');
             buf
         };
@@ -279,8 +308,10 @@ where
         writeln!(stdout, "----------")?;
 
         loop {
-            let checks =
-                self.github_client.get_check_runs_for_gitref(&repo_id, &commit.sha).await?;
+            let checks = self
+                .github_client
+                .get_check_runs_for_gitref(&repo_id, &commit.sha)
+                .await?;
             for c in &checks {
                 writeln!(
                     stdout,
@@ -404,7 +435,10 @@ impl fmt::Display for RepositorySettings {
 macro_rules! extract_key {
     ($repo:expr, $key:ident) => {
         $repo.$key.ok_or_else(|| {
-            Error::msg(formatdoc!("Missing value for key `{key}`.", key = stringify!($key)))
+            Error::msg(formatdoc!(
+                "Missing value for key `{key}`.",
+                key = stringify!($key)
+            ))
         })
     };
 }
@@ -439,7 +473,11 @@ macro_rules! diff_key {
     ($w:expr, $this:expr, $key:ident) => {{
         let old = $this.old.$key;
         let new = $this.new.$key;
-        write!($w, "{key:>25} = {old:>5} -> {new:<5}\n", key = stringify!($key))
+        write!(
+            $w,
+            "{key:>25} = {old:>5} -> {new:<5}\n",
+            key = stringify!($key)
+        )
     }};
 }
 
@@ -469,8 +507,11 @@ async fn get_repo_id_for_cwd() -> Result<RepositoryId, Error> {
 
 #[deprecated]
 fn create_client() -> Result<Octocrab, Error> {
-    let user_agent =
-        concat!(env!("CARGO_PKG_NAME"), concat!("/", env!("CARGO_PKG_VERSION"))).to_owned();
+    let user_agent = concat!(
+        env!("CARGO_PKG_NAME"),
+        concat!("/", env!("CARGO_PKG_VERSION"))
+    )
+    .to_owned();
     let token = env::var("SHUB_TOKEN")?;
     let client = Octocrab::builder()
         .add_header(HeaderName::from_static("user-agent"), user_agent)

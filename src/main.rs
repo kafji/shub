@@ -36,7 +36,7 @@ async fn main() -> Result<(), Error> {
     match cmd.cmd {
         Command::Repos { cmd } | Command::R { cmd } => match cmd {
             repos::Command::Ls {} => app.list_owned_repositories().await?,
-            repos::Command::Open { repo, upstream } => app.open_repository(repo, upstream).await?,
+            repos::Command::BrowseUpstream { repo } => app.browse_upstream(repo).await?,
             repos::Command::Settings { cmd } => match cmd {
                 repos::settings::Command::View { repo } => {
                     app.view_repository_settings(repo).await?
