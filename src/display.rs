@@ -292,18 +292,18 @@ impl fmt::Display for StarredRepository {
 }
 
 /// Transform `snake_case` to `Statement`.
-fn snake_case_to_statement(text: impl Into<String>) -> String {
-    let s = text.into();
-    let chars = s.grapheme_indices(true).map(|(i, c)| -> Cow<str> {
-        if i == 0 {
-            c.to_uppercase().into()
-        } else if c == "_" {
-            " ".into()
-        } else {
-            c.into()
-        }
-    });
-    chars.collect()
+fn snake_case_to_statement(text: &str) -> String {
+    text.grapheme_indices(true)
+        .map(|(i, c)| -> Cow<str> {
+            if i == 0 {
+                c.to_uppercase().into()
+            } else if c == "_" {
+                " ".into()
+            } else {
+                c.into()
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
