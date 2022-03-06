@@ -15,7 +15,6 @@ use futures::{
 };
 use git2::{build::RepoBuilder, Cred, FetchOptions, RemoteCallbacks};
 use http::header::HeaderName;
-use indoc::formatdoc;
 use octocrab::Octocrab;
 use sekret::Secret;
 use serde::{Deserialize, Serialize};
@@ -441,12 +440,9 @@ impl fmt::Display for RepositorySettings {
 
 macro_rules! extract_key {
     ($repo:expr, $key:ident) => {
-        $repo.$key.ok_or_else(|| {
-            Error::msg(formatdoc!(
-                "Missing value for key `{key}`.",
-                key = stringify!($key)
-            ))
-        })
+        $repo
+            .$key
+            .ok_or_else(|| Error::msg(format!("Missing value for key `{}`.", stringify!($key))))
     };
 }
 
