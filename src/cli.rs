@@ -15,16 +15,19 @@ pub enum Command {
         #[clap(subcommand)]
         cmd: repos::Command,
     },
+
     /// Stars related operations.
     S {
         #[clap(subcommand)]
         cmd: stars::Command,
     },
+
     /// Tasks related operations.
     T {
         #[clap(subcommand)]
         cmd: tasks::Command,
     },
+
     /// Workspace related operations.
     W {
         #[clap(subcommand)]
@@ -42,11 +45,13 @@ pub mod repos {
             /// Repository identifier.
             repo: Option<PartialRepositoryId>,
         },
+
         /// Clone remote repository.
         Clone {
             /// Repository identifier.
             repo: PartialRepositoryId,
         },
+
         /// Print build status of a repoistory.
         BuildStatus {
             /// Repository identifier.
@@ -100,6 +105,12 @@ pub mod workspace {
 
         /// Open editor to a project.
         Edit {
+            /// Project name.
+            name: String,
+        },
+
+        /// Print path to a project.
+        Locate {
             /// Project name.
             name: String,
         },

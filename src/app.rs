@@ -363,7 +363,19 @@ where
 
     pub async fn edit_project(&self, project_name: &str) -> Result<(), Error> {
         let editor = env::var("SHUB_EDITOR")?;
-        let project = ReadDirStream::new(fs::read_dir(&self.my_workspace_dir_path).await?)
+        let path = self.get_project_path(project_name).await?;
+        let error = Command::new(editor).arg(path).exec();
+        Err(error.into())
+    }
+
+    pub async fn print_project_path(&self, project_name: &str) -> Result<(), Error> {
+        let path = self.get_project_path(project_name).await?;
+        println!("{}", path.display());
+        Ok(())
+    }
+
+    async fn get_project_path(&self, project_name: &str) -> Result<PathBuf, Error> {
+        ReadDirStream::new(fs::read_dir(&self.my_workspace_dir_path).await?)
             .try_filter_map(|entry| {
                 future::ok(Some(entry.path()).and_then(|x| if x.is_dir() { Some(x) } else { None }))
             })
@@ -376,14 +388,8 @@ where
                 )
             })
             .try_next()
-            .await?;
-        match project {
-            Some(path) => {
-                let err = Command::new(editor).arg(path).exec();
-                Err(err.into())
-            }
-            None => bail!("project `{project_name}` does not exists"),
-        }
+            .await?
+            .ok_or_else(|| Error::msg(format!("project `{project_name}` does not exists")))
     }
 }
 

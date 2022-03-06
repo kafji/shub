@@ -33,8 +33,8 @@ async fn main() -> Result<(), Error> {
 
     match cmd.cmd {
         Command::R { cmd } => match cmd {
-            repos::Command::BrowseUpstream { repo } => app.browse_upstream_repository(repo).await?,
             repos::Command::Clone { repo } => app.clone_repository(repo).await?,
+            repos::Command::BrowseUpstream { repo } => app.browse_upstream_repository(repo).await?,
             repos::Command::BuildStatus { repo } => app.check_repository(repo).await?,
             repos::Command::ViewSettings { repo } => app.view_repository_settings(repo).await?,
             repos::Command::CopySettings { from, to } => {
@@ -50,6 +50,7 @@ async fn main() -> Result<(), Error> {
         Command::W { cmd } => match cmd {
             workspace::Command::Ls => app.list_projects().await?,
             workspace::Command::Edit { name } => app.edit_project(&name).await?,
+            workspace::Command::Locate { name } => app.print_project_path(&name).await?,
         },
     };
 
