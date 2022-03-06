@@ -13,32 +13,37 @@ pub enum Command {
     /// Repository related operations.
     Repos {
         #[clap(subcommand)]
-        cmd: self::repos::Command,
+        cmd: repos::Command,
     },
     /// Alias for repos.
     R {
         #[clap(subcommand)]
-        cmd: self::repos::Command,
+        cmd: repos::Command,
     },
     /// Stars related operations.
     Stars {
         #[clap(subcommand)]
-        cmd: self::stars::Command,
+        cmd: stars::Command,
     },
     /// Alias for stars.
     S {
         #[clap(subcommand)]
-        cmd: self::stars::Command,
+        cmd: stars::Command,
     },
     /// Tasks operations.
     Tasks {
         #[clap(subcommand)]
-        cmd: self::tasks::Command,
+        cmd: tasks::Command,
+    },
+    /// Alias for tasks.
+    T {
+        #[clap(subcommand)]
+        cmd: tasks::Command,
     },
     /// Workspace operations.
     Workspace {
         #[clap(subcommand)]
-        cmd: self::workspace::Command,
+        cmd: workspace::Command,
     },
 }
 
@@ -55,15 +60,15 @@ pub mod repos {
         /// Repository settings operation.
         Settings {
             #[clap(subcommand)]
-            cmd: self::settings::Command,
+            cmd: settings::Command,
         },
-        /// Clone remote repository. Only support cloning owned repository.
+        /// Clone remote repository.
         Clone {
             /// Repository identifier.
             repo: PartialRepositoryId,
         },
-        /// Print actions status of a repoistory.
-        Status {
+        /// Print build status of a repoistory.
+        BuildStatus {
             /// Repository identifier.
             repo: Option<PartialRepositoryId>,
         },
@@ -97,8 +102,8 @@ pub mod stars {
 
     #[derive(Subcommand, Debug)]
     pub enum Command {
-        /// Print list of starred repositories.
-        Ls {},
+        /// Print starred repositories.
+        Ls,
 
         /// Star an unstarred repository.
         Star { repo: RepositoryId },
@@ -113,8 +118,8 @@ pub mod tasks {
 
     #[derive(Subcommand, Debug)]
     pub enum Command {
-        /// Print list of issues and pull requests.
-        Ls {},
+        /// Print issues and pull requests assigned to me.
+        Ls,
     }
 }
 
@@ -123,11 +128,8 @@ pub mod workspace {
 
     #[derive(Subcommand, Debug)]
     pub enum Command {
-        /// Print list of projects under specified namespace.
-        Ls { namespace: String },
-
-        /// Print list of namespaces.
-        Namespaces {},
+        /// Print local projects.
+        Ls,
     }
 }
 

@@ -35,7 +35,6 @@ async fn main() -> Result<(), Error> {
 
     match cmd.cmd {
         Command::Repos { cmd } | Command::R { cmd } => match cmd {
-            repos::Command::Ls {} => app.list_owned_repositories().await?,
             repos::Command::BrowseUpstream { repo } => app.browse_upstream(repo).await?,
             repos::Command::Settings { cmd } => match cmd {
                 repos::settings::Command::View { repo } => {
@@ -46,17 +45,16 @@ async fn main() -> Result<(), Error> {
                 }
             },
             repos::Command::Clone { repo } => app.clone_repository(repo).await?,
-            repos::Command::Status { repo } => app.check_repository(repo).await?,
+            repos::Command::BuildStatus { repo } => app.check_repository(repo).await?,
         },
         Command::Stars { cmd } | Command::S { cmd } => match cmd {
             stars::Command::Ls {} => app.list_starred_repositories().await?,
             stars::Command::Star { repo } => todo!(),
             stars::Command::Unstar { repo } => todo!(),
         },
-        Command::Tasks { cmd } => todo!(),
+        Command::Tasks { cmd } | Command::T { cmd } => todo!(),
         Command::Workspace { cmd } => match cmd {
-            workspace::Command::Ls { namespace } => app.list_projects(&namespace).await?,
-            workspace::Command::Namespaces {} => todo!(),
+            workspace::Command::Ls => app.list_projects().await?,
         },
     };
 

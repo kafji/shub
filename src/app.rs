@@ -3,13 +3,10 @@ use crate::{
     display::RelativeFromNow,
     github_client::GitHubClientImpl,
     github_models::{GhCheckRun, GhCommit, GhRepository},
-    kceh, GetRepositoryId, OwnedRepository, PartialRepositoryId, RepositoryId, Secret,
-    StarredRepository,
+    kceh, PartialRepositoryId, RepositoryId, Secret, StarredRepository,
 };
 use anyhow::{bail, ensure, Context, Error, Result};
-use async_stream::stream;
 use async_trait::async_trait;
-use bytes::{Bytes, BytesMut};
 use console::Term;
 use dialoguer::Confirm;
 use futures::{
@@ -27,7 +24,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, BufReader},
+    io::{AsyncBufReadExt, BufReader},
     task,
 };
 use tokio_stream::wrappers::{LinesStream, ReadDirStream};
@@ -301,8 +298,8 @@ where
         Ok(())
     }
 
-    pub async fn list_projects(&self, namespace: &'a str) -> Result<(), Error> {
-        let path = create_namespaced_workspace_path(self.workspace_root_dir, namespace);
+    pub async fn list_projects(&self) -> Result<(), Error> {
+        let path = create_namespaced_workspace_path(self.workspace_root_dir, self.github_username);
         {
             let meta = tokio::fs::metadata(&path).await?;
             ensure!(meta.is_dir());
