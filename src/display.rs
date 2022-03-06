@@ -292,18 +292,15 @@ impl fmt::Display for StarredRepository {
 }
 
 /// Transform `snake_case` to `Statement`.
-///
-/// Assumes characters are ASCII characters.
 fn snake_case_to_statement(text: impl Into<String>) -> String {
     let s = text.into();
-    let chars = s.chars().into_iter();
-    let chars = chars.enumerate().map(|(i, c)| {
+    let chars = s.grapheme_indices(true).map(|(i, c)| -> Cow<str> {
         if i == 0 {
-            c.to_ascii_uppercase()
-        } else if c == '_' {
-            ' '
+            c.to_uppercase().into()
+        } else if c == "_" {
+            " ".into()
         } else {
-            c
+            c.into()
         }
     });
     chars.collect()
@@ -360,7 +357,7 @@ impl fmt::Display for CommitInfo<'_> {
             f,
             "{}",
             self.message
-                .graphemes(false)
+                .graphemes(true)
                 .take_while(|&x| x != "\n")
                 .collect::<String>()
         )?;
