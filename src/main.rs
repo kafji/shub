@@ -35,7 +35,7 @@ async fn main() -> Result<(), Error> {
         Command::R { cmd } => match cmd {
             repos::Command::Clone { repo } => app.clone_repository(repo).await?,
             repos::Command::BrowseUpstream { repo } => app.browse_upstream_repository(repo).await?,
-            repos::Command::BuildStatus { repo } => app.check_repository(repo).await?,
+            repos::Command::BuildStatus { repo } => app.poll_repository_build_status(repo).await?,
             repos::Command::ViewSettings { repo } => app.view_repository_settings(repo).await?,
             repos::Command::CopySettings { from, to } => {
                 app.copy_repository_settings(from, to).await?

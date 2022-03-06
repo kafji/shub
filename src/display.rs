@@ -1,7 +1,12 @@
-use crate::{OwnedRepository, StarredRepository};
+use crate::{
+    github_models::{GhCheckRun, GhCommit},
+    OwnedRepository, StarredRepository,
+};
+use bstr::BStr;
 use chrono::{DateTime, TimeZone, Utc};
 use octocrab::models::Repository;
 use std::{borrow::Cow, fmt};
+use unicode_segmentation::UnicodeSegmentation;
 
 macro_rules! write_col {
     ($w:expr, $len:expr, $txt:expr) => {
@@ -82,15 +87,15 @@ fn test_ellipsize() {
 }
 
 /// Relative time from now.
-pub trait RelativeFromNow {
-    fn relative_from_now(&self) -> Since;
+pub trait RelativeTime {
+    fn since(&self) -> Since;
 }
 
-impl<T> RelativeFromNow for DateTime<T>
+impl<T> RelativeTime for DateTime<T>
 where
     T: TimeZone,
 {
-    fn relative_from_now(&self) -> Since {
+    fn since(&self) -> Since {
         let duration = Utc::now().signed_duration_since(self.clone());
         Since(duration)
     }
@@ -221,7 +226,7 @@ impl fmt::Display for OwnedRepository {
         let pushed = repo
             .pushed_at
             .as_ref()
-            .map(|x| x.relative_from_now().to_string())
+            .map(|x| x.since().to_string())
             .map(Cow::Owned)
             .unwrap_or_default();
         write_col!(, f, PUSHED_AT_LEN, &pushed)?;
@@ -267,7 +272,7 @@ impl fmt::Display for StarredRepository {
         let pushed = repo
             .pushed_at
             .as_ref()
-            .map(|x| x.relative_from_now().to_string())
+            .map(|x| x.since().to_string())
             .map(Cow::Owned)
             .unwrap_or_default();
         write_col!(, f, PUSHED_AT_LEN, &pushed)?;
@@ -310,4 +315,108 @@ fn test_snake_case_to_statement() {
     let input = "hello_world";
     let output = snake_case_to_statement(input);
     assert_eq!("Hello world", output);
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct CommitInfo<'a> {
+    pub author_name: Option<&'a str>,
+    pub author_email: Option<&'a str>,
+    pub timestamp: &'a DateTime<Utc>,
+    pub hash: &'a BStr,
+    pub message: &'a str,
+}
+
+impl<'a> CommitInfo<'a> {
+    pub fn from_github_commit(commit: &'a GhCommit) -> Self {
+        let author_name = commit.commit.author.name.as_deref();
+        let author_email = commit.commit.author.email.as_deref();
+        let timestamp = &commit.commit.author.date;
+        let hash = commit.sha.as_str().into();
+        let message = &commit.commit.message;
+        Self {
+            author_name,
+            author_email,
+            timestamp,
+            hash,
+            message,
+        }
+    }
+}
+
+impl fmt::Display for CommitInfo<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(author_name) = self.author_name {
+            write!(f, "{author_name}")?;
+            if let Some(author_email) = self.author_email {
+                write!(f, " <{author_email}>")?;
+            }
+            write!(f, " - ")?;
+        } else if let Some(author_email) = self.author_email {
+            write!(f, "{author_email} - ")?;
+        }
+        writeln!(f, "{}", self.timestamp.since())?;
+        writeln!(f, "{}", &self.hash[..8])?;
+        writeln!(
+            f,
+            "{}",
+            self.message
+                .graphemes(false)
+                .take_while(|&x| x != "\n")
+                .collect::<String>()
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct BuildsInfo<'a> {
+    builds: Vec<BuildInfo<'a>>,
+}
+
+impl<'a> BuildsInfo<'a> {
+    pub fn from_github_check_runs(runs: &'a [GhCheckRun]) -> Self {
+        let builds = runs.iter().map(BuildInfo::from_github_check_run).collect();
+        Self { builds }
+    }
+}
+
+impl fmt::Display for BuildsInfo<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for build in &self.builds {
+            writeln!(f, "{}", build)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+struct BuildInfo<'a> {
+    name: &'a str,
+    status: &'a str,
+    timestamp: &'a DateTime<Utc>,
+}
+
+impl<'a> BuildInfo<'a> {
+    fn from_github_check_run(run: &'a GhCheckRun) -> Self {
+        let name = &run.name;
+        let status = run.conclusion.as_deref().unwrap_or(&run.status);
+        let timestamp = run.completed_at.as_ref().unwrap_or(&run.started_at);
+        Self {
+            name,
+            status,
+            timestamp,
+        }
+    }
+}
+
+impl fmt::Display for BuildInfo<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}: {} - {}",
+            self.name,
+            self.status,
+            self.timestamp.since()
+        )
+    }
 }

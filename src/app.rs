@@ -1,6 +1,6 @@
 use crate::{
     create_local_repository_path, create_namespaced_workspace_path,
-    display::{snake_case_to_statement, RelativeFromNow},
+    display::{snake_case_to_statement, BuildsInfo, CommitInfo, RelativeTime},
     github_client::GitHubClientImpl,
     github_models::{GhCheckRun, GhCommit, GhRepository},
     PartialRepositoryId, RepositoryId, StarredRepository,
@@ -10,8 +10,9 @@ use async_trait::async_trait;
 use console::Term;
 use dialoguer::Confirm;
 use futures::{
-    future,
+    future::{self, BoxFuture},
     stream::{LocalBoxStream, StreamExt, TryStreamExt},
+    FutureExt,
 };
 use git2::{build::RepoBuilder, Cred, FetchOptions, RemoteCallbacks};
 use http::header::HeaderName;
@@ -221,90 +222,53 @@ where
         Ok(())
     }
 
-    pub async fn check_repository(
+    pub async fn poll_repository_build_status(
         &'a self,
         repo_id: Option<PartialRepositoryId>,
     ) -> Result<(), Error> {
-        let mut stdout = Term::buffered_stdout();
+        let mut out = Term::buffered_stdout();
 
-        let repo_id = match repo_id {
-            Some(repo_id) => repo_id.complete(self.github_username),
-            None => get_repo_id_for_cwd().await?,
-        };
-        writeln!(stdout, "{repo_id}")?;
-        stdout.flush()?;
+        let repo_id = repo_id
+            .map(|x| x.complete(self.github_username))
+            .map(future::ok)
+            .map(FutureExt::boxed)
+            .unwrap_or_else(|| get_repo_id_for_cwd().boxed())
+            .await?;
 
-        writeln!(stdout, "----------")?;
+        writeln!(out, "{repo_id}\n")?;
+        out.flush()?;
 
-        let commit = {
-            let commits: Vec<_> = {
-                let commits = self.github_client.list_repository_commits(&repo_id);
-                commits.take(1).try_collect().await?
-            };
-            commits.first().map(ToOwned::to_owned)
-        };
-        let commit = match commit {
-            Some(x) => x,
-            None => bail!("Repository {repo_id} doesn't have a commit yet."),
-        };
-        let commit_author = {
-            let mut buf = String::new();
-            let author = &commit.commit.author;
-            buf.extend(
-                author
-                    .name
-                    .as_ref()
-                    .map(Cow::Borrowed)
-                    .unwrap_or_default()
-                    .chars(),
-            );
-            buf.push('<');
-            buf.extend(
-                author
-                    .email
-                    .as_ref()
-                    .map(Cow::Borrowed)
-                    .unwrap_or_default()
-                    .chars(),
-            );
-            buf.push('>');
-            buf
-        };
-        writeln!(
-            stdout,
-            "{commit_author} - {}\n{}\n{}",
-            commit.commit.author.date.relative_from_now(),
-            commit.sha,
-            commit.commit.message
-        )?;
-        stdout.flush()?;
+        let commit = self
+            .github_client
+            .list_repository_commits(&repo_id)
+            .try_next()
+            .await?
+            .ok_or_else(|| {
+                Error::msg(format!("Repository {repo_id} doesn't have a commit yet."))
+            })?;
 
-        writeln!(stdout, "----------")?;
+        writeln!(out, "{}", CommitInfo::from_github_commit(&commit))?;
+        out.flush()?;
 
         loop {
-            let checks = self
+            let runs = self
                 .github_client
                 .get_check_runs_for_gitref(&repo_id, &commit.sha)
                 .await?;
-            for c in &checks {
-                writeln!(
-                    stdout,
-                    "{}: {} - {}",
-                    c.name,
-                    snake_case_to_statement(c.conclusion.as_deref().unwrap_or(&c.status)),
-                    c.completed_at.unwrap_or(c.started_at).relative_from_now()
-                )?;
-            }
-            stdout.flush()?;
-            let completed = checks.iter().map(|x| x.completed_at.is_some()).all(|x| x);
+
+            write!(out, "{}", BuildsInfo::from_github_check_runs(&runs))?;
+            out.flush()?;
+
+            let completed = runs.iter().all(|x| x.completed_at.is_some());
             if completed {
                 break;
             }
+
             tokio::time::sleep(Duration::from_secs(10)).await;
-            stdout.clear_last_lines(checks.len())?;
+            out.clear_last_lines(runs.len())?;
         }
 
-        stdout.flush()?;
+        out.flush()?;
         Ok(())
     }
 
