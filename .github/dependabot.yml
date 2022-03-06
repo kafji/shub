@@ -9,6 +9,7 @@ updates:
       interval: "daily"
     reviewers:
       - "kafji"
+
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
