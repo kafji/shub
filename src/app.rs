@@ -163,26 +163,6 @@ where
         Ok(())
     }
 
-    pub async fn list_owned_repositories(&'a self) -> Result<(), Error> {
-        let repos = self.github_client.list_owned_repositories();
-        repos
-            .and_then(|repo| async {
-                let repo_id = repo.get_repository_id()?;
-                let commits: Vec<_> = {
-                    let commits = self.github_client.list_repository_commits(&repo_id);
-                    commits.take(1).try_collect().await?
-                };
-                let commit = commits.first().map(ToOwned::to_owned);
-                Ok(OwnedRepository(repo, commit))
-            })
-            .try_for_each(|repo| {
-                println!("{}", repo);
-                future::ok(())
-            })
-            .await?;
-        Ok(())
-    }
-
     pub async fn clone_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
         let repo_id = repo_id.complete(self.github_username);
 
@@ -509,9 +489,6 @@ fn create_client() -> Result<Octocrab, Error> {
 
 #[async_trait]
 pub trait GitHubClient<'a> {
-    /// https://docs.github.com/en/rest/reference/repos#list-repositories-for-the-authenticated-user
-    fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>>;
-
     fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>>;
 
     /// https://docs.github.com/en/rest/reference/commits#list-commits

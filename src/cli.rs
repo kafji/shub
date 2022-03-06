@@ -47,8 +47,6 @@ pub mod repos {
 
     #[derive(Subcommand, Debug)]
     pub enum Command {
-        /// Print list of owned repositories.
-        Ls {},
         /// Browse upstream repository of a fork.
         BrowseUpstream {
             /// Repository identifier.

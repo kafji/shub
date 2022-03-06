@@ -15,8 +15,11 @@ pub struct GitHubClientImpl {
 
 impl GitHubClientImpl {
     pub fn new(token: impl Into<Secret<String>>) -> Result<Self, Error> {
-        let user_agent =
-            concat!(env!("CARGO_PKG_NAME"), concat!("/", env!("CARGO_PKG_VERSION"))).to_owned();
+        let user_agent = concat!(
+            env!("CARGO_PKG_NAME"),
+            concat!("/", env!("CARGO_PKG_VERSION"))
+        )
+        .to_owned();
         let token: Secret<_> = token.into();
         let client = Octocrab::builder()
             .add_header(HeaderName::from_static("user-agent"), user_agent)
@@ -29,23 +32,6 @@ impl GitHubClientImpl {
 
 #[async_trait]
 impl<'a> GitHubClient<'a> for GitHubClientImpl {
-    fn list_owned_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>> {
-        let this = self.clone();
-        let items = unpage(move |page_num| {
-            let client = this.client.clone();
-            async move {
-                let path: Cow<_> = if let Some(page_num) = page_num {
-                    format!("user/repos?type=owner&sort=pushed&per_page=100&page={page_num}").into()
-                } else {
-                    "user/repos?type=owner&sort=pushed&per_page=100".into()
-                };
-                let items: Page<_> = client.get::<_, _, ()>(path, None).await?;
-                Ok(items)
-            }
-        });
-        items.boxed_local()
-    }
-
     fn list_stared_repositories(&'a self) -> LocalBoxStream<'a, Result<GhRepository, Error>> {
         let this = self.clone();
         let items = unpage(move |page_num| {
@@ -127,7 +113,11 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
 
     async fn fork_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error> {
         let client = &self.client;
-        client.repos(repo_id.owner, repo_id.name).create_fork().send().await?;
+        client
+            .repos(repo_id.owner, repo_id.name)
+            .create_fork()
+            .send()
+            .await?;
         Ok(())
     }
 }
