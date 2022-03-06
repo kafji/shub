@@ -301,7 +301,7 @@ where
             if completed {
                 break;
             }
-            tokio::time::sleep(Duration::from_secs(fastrand::u64(10..=20))).await;
+            tokio::time::sleep(Duration::from_secs(10)).await;
             stdout.clear_last_lines(checks.len())?;
         }
 
