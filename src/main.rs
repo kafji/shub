@@ -46,8 +46,6 @@ async fn main() -> Result<(), Error> {
                 }
             },
             repos::Command::Clone { repo } => app.clone_repository(repo).await?,
-            repos::Command::Create { repo } => todo!(),
-            repos::Command::Delete { repo } => app.delete_repository(repo).await?,
             repos::Command::Status { repo } => app.check_repository(repo).await?,
         },
         Command::Stars { cmd } | Command::S { cmd } => match cmd {

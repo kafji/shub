@@ -64,16 +64,6 @@ pub mod repos {
             /// Repository identifier.
             repo: PartialRepositoryId,
         },
-        /// Create repository.
-        Create {
-            /// Repository identifier.
-            repo: PartialRepositoryId,
-        },
-        /// Delete repository. Only support deleting forked repository.
-        Delete {
-            /// Repository identifier.
-            repo: PartialRepositoryId,
-        },
         /// Print actions status of a repoistory.
         Status {
             /// Repository identifier.

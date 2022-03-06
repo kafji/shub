@@ -234,14 +234,6 @@ where
         Ok(())
     }
 
-    pub async fn delete_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
-        let repo_id = repo_id.complete(self.github_username);
-        let repo = self.github_client.get_repository(repo_id.clone()).await?;
-        ensure!(repo.fork.unwrap_or_default());
-        self.github_client.delete_repository(repo_id).await?;
-        Ok(())
-    }
-
     pub async fn check_repository(
         &'a self,
         repo_id: Option<PartialRepositoryId>,
