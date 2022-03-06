@@ -118,7 +118,7 @@ pub mod workspace {
         /// Print local projects.
         Ls,
 
-        /// Open editor to the specified project.
+        /// Open editor to a project.
         Edit {
             /// Project name.
             name: String,
