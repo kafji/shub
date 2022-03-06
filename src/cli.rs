@@ -11,41 +11,21 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Repository related operations.
-    Repos {
-        #[clap(subcommand)]
-        cmd: repos::Command,
-    },
-    /// Alias for repos.
     R {
         #[clap(subcommand)]
         cmd: repos::Command,
     },
     /// Stars related operations.
-    Stars {
-        #[clap(subcommand)]
-        cmd: stars::Command,
-    },
-    /// Alias for stars.
     S {
         #[clap(subcommand)]
         cmd: stars::Command,
     },
     /// Tasks operations.
-    Tasks {
-        #[clap(subcommand)]
-        cmd: tasks::Command,
-    },
-    /// Alias for tasks.
     T {
         #[clap(subcommand)]
         cmd: tasks::Command,
     },
     /// Workspace operations.
-    Workspace {
-        #[clap(subcommand)]
-        cmd: workspace::Command,
-    },
-    /// Alias for workspace.
     W {
         #[clap(subcommand)]
         cmd: workspace::Command,
