@@ -189,58 +189,6 @@ fn test_parse_partial_repository_id() {
     );
 }
 
-/// Secret container.
-///
-/// A simple container that will redact its value when it's printed.
-#[derive(PartialEq, Clone)]
-pub struct Secret<T>(pub T);
-
-impl<T> Copy for Secret<T> where T: Copy {}
-
-impl<T> From<T> for Secret<T> {
-    fn from(s: T) -> Self {
-        Self(s)
-    }
-}
-
-impl<T> fmt::Debug for Secret<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Secret").field(&"█████").finish()
-    }
-}
-
-impl<T> fmt::Display for Secret<T>
-where
-    T: fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "█████")
-    }
-}
-
-impl<T> Secret<T> {
-    pub fn as_ref(&self) -> Secret<&T> {
-        Secret(&self.0)
-    }
-
-    pub fn map<U, F>(self, f: F) -> Secret<U>
-    where
-        F: FnOnce(T) -> U,
-    {
-        let v = f(self.0);
-        Secret(v)
-    }
-}
-
-#[cfg(test)]
-#[test]
-fn test_print_secret() {
-    let secret = Secret("sekret");
-    assert!(!format!("{secret}").contains("sekret"));
-    assert!(!format!("{secret:?}").contains("sekret"));
-    assert!(!format!("{secret:#?}").contains("sekret"));
-}
-
 fn create_namespaced_workspace_path(
     workspace_root_dir: impl AsRef<Path>,
     namespace: &str,

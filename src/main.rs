@@ -2,10 +2,8 @@ mod cli;
 
 use crate::cli::*;
 use anyhow::{Error, Result};
-use shub::{
-    app::{App, AppConfig},
-    Secret,
-};
+use sekret::Secret;
+use shub::app::{App, AppConfig};
 use std::{env, path::PathBuf};
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
@@ -35,7 +33,7 @@ async fn main() -> Result<(), Error> {
 
     match cmd.cmd {
         Command::R { cmd } => match cmd {
-            repos::Command::BrowseUpstream { repo } => app.browse_upstream(repo).await?,
+            repos::Command::BrowseUpstream { repo } => app.browse_upstream_repository(repo).await?,
             repos::Command::Clone { repo } => app.clone_repository(repo).await?,
             repos::Command::BuildStatus { repo } => app.check_repository(repo).await?,
             repos::Command::ViewSettings { repo } => app.view_repository_settings(repo).await?,

@@ -1207,6 +1207,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "sekret"
+version = "0.2.0"
+source = "git+https://github.com/kafji/sekret?tag=v0.2.0#6ad5da8b00667ebe9aadad05178e2540d2403212"
+
+[[package]]
 name = "serde"
 version = "1.0.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1287,6 +1292,7 @@ dependencies = [
  "octocrab",
  "quickcheck",
  "quickcheck_macros",
+ "sekret",
  "serde",
  "serde_json",
  "tempfile",

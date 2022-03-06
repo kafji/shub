@@ -1,10 +1,11 @@
-use crate::{app::GitHubClient, github_models::*, RepositoryId, Secret};
+use crate::{app::GitHubClient, github_models::*, RepositoryId};
 use anyhow::{bail, Error};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use futures::{stream::LocalBoxStream, Future, Stream, StreamExt};
 use http::header::HeaderName;
 use octocrab::{Octocrab, Page};
+use sekret::Secret;
 use serde::Deserialize;
 use std::{borrow::Cow, env};
 

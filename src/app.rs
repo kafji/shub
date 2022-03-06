@@ -3,7 +3,7 @@ use crate::{
     display::RelativeFromNow,
     github_client::GitHubClientImpl,
     github_models::{GhCheckRun, GhCommit, GhRepository},
-    kceh, PartialRepositoryId, RepositoryId, Secret, StarredRepository,
+    kceh, PartialRepositoryId, RepositoryId, StarredRepository,
 };
 use anyhow::{bail, ensure, Context, Error, Result};
 use async_trait::async_trait;
@@ -17,6 +17,7 @@ use git2::{build::RepoBuilder, Cred, FetchOptions, RemoteCallbacks};
 use http::header::HeaderName;
 use indoc::formatdoc;
 use octocrab::Octocrab;
+use sekret::Secret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -135,7 +136,7 @@ where
         Ok(())
     }
 
-    pub async fn browse_upstream(
+    pub async fn browse_upstream_repository(
         &'a self,
         repo_id: Option<PartialRepositoryId>,
     ) -> Result<(), Error> {
