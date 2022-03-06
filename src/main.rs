@@ -34,7 +34,7 @@ async fn main() -> Result<(), Error> {
     let app = App::new(cfg)?;
 
     match cmd.cmd {
-        Command::Repos { cmd } | Command::R { cmd } => match cmd {
+        Command::R { cmd } => match cmd {
             repos::Command::BrowseUpstream { repo } => app.browse_upstream(repo).await?,
             repos::Command::Clone { repo } => app.clone_repository(repo).await?,
             repos::Command::BuildStatus { repo } => app.check_repository(repo).await?,
@@ -43,13 +43,13 @@ async fn main() -> Result<(), Error> {
                 app.copy_repository_settings(from, to).await?
             }
         },
-        Command::Stars { cmd } | Command::S { cmd } => match cmd {
+        Command::S { cmd } => match cmd {
             stars::Command::Ls => app.list_starred_repositories().await?,
         },
-        Command::Tasks { cmd } | Command::T { cmd } => match cmd {
+        Command::T { cmd } => match cmd {
             tasks::Command::Ls => todo!(),
         },
-        Command::Workspace { cmd } | Command::W { cmd } => match cmd {
+        Command::W { cmd } => match cmd {
             workspace::Command::Ls => app.list_projects().await?,
             workspace::Command::Edit { name } => todo!(),
         },
