@@ -77,7 +77,7 @@ where
         Ok(())
     }
 
-    pub async fn apply_repository_settings(
+    pub async fn copy_repository_settings(
         &self,
         from: PartialRepositoryId,
         to: PartialRepositoryId,

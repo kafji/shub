@@ -62,11 +62,6 @@ pub mod repos {
             /// Repository identifier.
             repo: Option<PartialRepositoryId>,
         },
-        /// Repository settings operation.
-        Settings {
-            #[clap(subcommand)]
-            cmd: settings::Command,
-        },
         /// Clone remote repository.
         Clone {
             /// Repository identifier.
@@ -77,28 +72,21 @@ pub mod repos {
             /// Repository identifier.
             repo: Option<PartialRepositoryId>,
         },
-    }
 
-    pub mod settings {
-        use super::*;
+        /// Print repository settings.
+        ViewSettings {
+            /// Repository identifier.
+            repo: PartialRepositoryId,
+        },
 
-        #[derive(Subcommand, Debug)]
-        pub enum Command {
-            /// Print repository settings.
-            View {
-                /// Repository identifier.
-                repo: PartialRepositoryId,
-            },
+        /// Copy repository settings from another repository.
+        CopySettings {
+            /// Repository to copy the settings from.
+            from: PartialRepositoryId,
 
-            /// Apply repository settings from another repository.
-            Apply {
-                /// Repository to apply the settings from.
-                from: PartialRepositoryId,
-
-                /// Repository to apply the settings to.
-                to: PartialRepositoryId,
-            },
-        }
+            /// Repository to apply the settings to.
+            to: PartialRepositoryId,
+        },
     }
 }
 
