@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use shub::PartialRepositoryId;
+use shub::repository_id::PartialRepositoryId;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -52,7 +52,7 @@ pub mod repos {
             repo: PartialRepositoryId,
         },
 
-        /// Print build status of a repoistory.
+        /// Poll build status of a repoistory.
         BuildStatus {
             /// Repository identifier.
             repo: Option<PartialRepositoryId>,

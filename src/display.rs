@@ -294,7 +294,7 @@ impl fmt::Display for StarredRepository {
 /// Transform `snake_case` to `Statement`.
 ///
 /// Assumes characters are ASCII characters.
-pub fn snake_case_to_statement(text: impl Into<String>) -> String {
+fn snake_case_to_statement(text: impl Into<String>) -> String {
     let s = text.into();
     let chars = s.chars().into_iter();
     let chars = chars.enumerate().map(|(i, c)| {
@@ -415,7 +415,7 @@ impl fmt::Display for BuildInfo<'_> {
             f,
             "{}: {} - {}",
             self.name,
-            self.status,
+            snake_case_to_statement(self.status),
             self.timestamp.since()
         )
     }

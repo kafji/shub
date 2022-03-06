@@ -1,4 +1,4 @@
-use crate::{app::GitHubClient, github_models::*, RepositoryId};
+use crate::{app::GitHubClient, github_models::*, FullRepositoryId};
 use anyhow::{bail, Error};
 use async_stream::try_stream;
 use async_trait::async_trait;
@@ -52,13 +52,13 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
 
     fn list_repository_commits<'b>(
         &'a self,
-        repo_id: &'b RepositoryId,
+        repo_id: &'b FullRepositoryId,
     ) -> LocalBoxStream<'b, Result<GhCommit, Error>>
     where
         'a: 'b,
     {
         let items = unpage(move |page_num| async move {
-            let RepositoryId { owner, name } = repo_id;
+            let FullRepositoryId { owner, name } = repo_id;
             let path = if let Some(page_num) = page_num {
                 format!("repos/{owner}/{name}/commits?per_page=100&page={page_num}")
             } else {
@@ -72,13 +72,13 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
 
     async fn get_check_runs_for_gitref<'b>(
         &'a self,
-        repo_id: &'b RepositoryId,
+        repo_id: &'b FullRepositoryId,
         gitref: &'b str,
     ) -> Result<Vec<GhCheckRun>, Error>
     where
         'a: 'b,
     {
-        let RepositoryId { owner, name } = repo_id;
+        let FullRepositoryId { owner, name } = repo_id;
         let path = format!("repos/{owner}/{name}/commits/{gitref}/check-runs?per_page=100");
 
         #[derive(Deserialize)]
@@ -89,7 +89,7 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
         Ok(res.check_runs)
     }
 
-    async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<GhRepository, Error> {
+    async fn get_repository(&'a self, repo_id: FullRepositoryId) -> Result<GhRepository, Error> {
         let client = &self.client;
         let repo = client.repos(&repo_id.owner, &repo_id.name).get().await;
         let repo = match repo {
@@ -106,13 +106,13 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
         Ok(repo)
     }
 
-    async fn delete_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error> {
+    async fn delete_repository(&'a self, repo_id: FullRepositoryId) -> Result<(), Error> {
         let client = &self.client;
         client.repos(repo_id.owner, repo_id.name).delete().await?;
         Ok(())
     }
 
-    async fn fork_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error> {
+    async fn fork_repository(&'a self, repo_id: FullRepositoryId) -> Result<(), Error> {
         let client = &self.client;
         client
             .repos(repo_id.owner, repo_id.name)

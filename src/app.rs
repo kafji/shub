@@ -1,16 +1,17 @@
 use crate::{
     create_local_repository_path, create_namespaced_workspace_path,
-    display::{snake_case_to_statement, BuildsInfo, CommitInfo, RelativeTime},
+    display::{BuildsInfo, CommitInfo},
     github_client::GitHubClientImpl,
     github_models::{GhCheckRun, GhCommit, GhRepository},
-    PartialRepositoryId, RepositoryId, StarredRepository,
+    repository_id::PartialRepositoryId,
+    FullRepositoryId, StarredRepository,
 };
 use anyhow::{bail, ensure, Context, Error, Result};
 use async_trait::async_trait;
 use console::Term;
 use dialoguer::Confirm;
 use futures::{
-    future::{self, BoxFuture},
+    future,
     stream::{LocalBoxStream, StreamExt, TryStreamExt},
     FutureExt,
 };
@@ -98,9 +99,9 @@ where
 
         let client = create_client()?;
 
-        let get_settings = |repo_id: RepositoryId| {
+        let get_settings = |repo_id: FullRepositoryId| {
             let client = client.clone();
-            let RepositoryId { owner, name } = repo_id;
+            let FullRepositoryId { owner, name } = repo_id;
             async move {
                 let repo = client.repos(owner, name).get().await?;
                 let settings = repo.extract_repository_settings()?;
@@ -125,7 +126,7 @@ where
         }
 
         let _: HashMap<String, Value> = {
-            let RepositoryId { owner, name } = to;
+            let FullRepositoryId { owner, name } = to;
             client
                 .patch(format!("repos/{owner}/{name}"), Some(&new_settings))
                 .await?
@@ -459,7 +460,7 @@ impl fmt::Display for RepositorySettingsDiff<'_> {
     }
 }
 
-async fn get_repo_id_for_cwd() -> Result<RepositoryId, Error> {
+async fn get_repo_id_for_cwd() -> Result<FullRepositoryId, Error> {
     task::block_in_place(|| {
         let repo = git2::Repository::discover(".")?;
         let origin = repo.find_remote("origin")?;
@@ -494,7 +495,7 @@ pub trait GitHubClient<'a> {
     /// https://docs.github.com/en/rest/reference/commits#list-commits
     fn list_repository_commits<'b>(
         &'a self,
-        repo_id: &'b RepositoryId,
+        repo_id: &'b FullRepositoryId,
     ) -> LocalBoxStream<'b, Result<GhCommit, Error>>
     where
         'a: 'b;
@@ -502,15 +503,15 @@ pub trait GitHubClient<'a> {
     /// https://docs.github.com/en/rest/reference/checks#list-check-runs-for-a-git-reference
     async fn get_check_runs_for_gitref<'b>(
         &'a self,
-        repo_id: &'b RepositoryId,
+        repo_id: &'b FullRepositoryId,
         gitref: &'b str,
     ) -> Result<Vec<GhCheckRun>, Error>
     where
         'a: 'b;
 
-    async fn get_repository(&'a self, repo_id: RepositoryId) -> Result<GhRepository, Error>;
+    async fn get_repository(&'a self, repo_id: FullRepositoryId) -> Result<GhRepository, Error>;
 
-    async fn delete_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error>;
+    async fn delete_repository(&'a self, repo_id: FullRepositoryId) -> Result<(), Error>;
 
-    async fn fork_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error>;
+    async fn fork_repository(&'a self, repo_id: FullRepositoryId) -> Result<(), Error>;
 }
