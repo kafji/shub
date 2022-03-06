@@ -1,6 +1,6 @@
 # Shub
 
-Kafji's workspace CLI.
+Kafji's work**s**pace **hub** CLI.
 
 ## Install
 
