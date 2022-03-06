@@ -20,12 +20,12 @@ pub enum Command {
         #[clap(subcommand)]
         cmd: stars::Command,
     },
-    /// Tasks operations.
+    /// Tasks related operations.
     T {
         #[clap(subcommand)]
         cmd: tasks::Command,
     },
-    /// Workspace operations.
+    /// Workspace related operations.
     W {
         #[clap(subcommand)]
         cmd: workspace::Command,
