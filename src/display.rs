@@ -8,13 +8,28 @@ macro_rules! write_col {
         write!($w, "{:len$}", ellipsize($txt, $len as _), len = $len as _)
     };
     (, $w:expr, $len:expr, $txt:expr) => {
-        write!($w, " | {:len$}", ellipsize($txt, $len as _), len = $len as _)
+        write!(
+            $w,
+            " | {:len$}",
+            ellipsize($txt, $len as _),
+            len = $len as _
+        )
     };
     ($w:expr, $len:expr, $txt:expr, ) => {
-        write!($w, "{:len$} | ", ellipsize($txt, $len as _), len = $len as _)
+        write!(
+            $w,
+            "{:len$} | ",
+            ellipsize($txt, $len as _),
+            len = $len as _
+        )
     };
     (, $w:expr, $len:expr, $txt:expr, ) => {
-        write!($w, " | {:len$} | ", ellipsize($txt, $len as _), len = $len as _)
+        write!(
+            $w,
+            " | {:len$} | ",
+            ellipsize($txt, $len as _),
+            len = $len as _
+        )
     };
 }
 
@@ -28,8 +43,11 @@ pub fn ellipsize(text: &str, threshold: usize) -> Cow<'_, str> {
     if text.len() <= threshold {
         text.into()
     } else {
-        let text: String =
-            text.chars().map(|c| if c == '\n' { ' ' } else { c }).take(threshold - 2).collect();
+        let text: String = text
+            .chars()
+            .map(|c| if c == '\n' { ' ' } else { c })
+            .take(threshold - 2)
+            .collect();
         let text: String = text.trim().chars().chain("..".chars()).collect();
         text.into()
     }
@@ -150,7 +168,11 @@ impl From<&Repository> for RepositoryAttrs {
             attrs.push("fork");
         }
 
-        let attrs = attrs.into_iter().map(|x| ellipsize(x, 10)).collect::<Vec<_>>().join(", ");
+        let attrs = attrs
+            .into_iter()
+            .map(|x| ellipsize(x, 10))
+            .collect::<Vec<_>>()
+            .join(", ");
         Self(attrs)
     }
 }
@@ -184,8 +206,10 @@ impl fmt::Display for OwnedRepository {
         let repo = &self.0;
         let commit = &self.1;
 
-        let visibility =
-            repo.private.map(|x| if x { "private" } else { "public" }).unwrap_or_default();
+        let visibility = repo
+            .private
+            .map(|x| if x { "private" } else { "public" })
+            .unwrap_or_default();
         write_col!(f, 6, visibility,)?;
 
         let name: RepositoryName = repo.into();
@@ -202,11 +226,18 @@ impl fmt::Display for OwnedRepository {
             .unwrap_or_default();
         write_col!(, f, PUSHED_AT_LEN, &pushed)?;
 
-        let last_commit =
-            commit.as_ref().map(|x| &x.commit).map(|x| x.message.as_str()).unwrap_or_default();
+        let last_commit = commit
+            .as_ref()
+            .map(|x| &x.commit)
+            .map(|x| x.message.as_str())
+            .unwrap_or_default();
         write_col!(, f, COMMIT_MSG_LEN, last_commit)?;
 
-        let lang = repo.language.as_ref().and_then(|x| x.as_str()).unwrap_or_default();
+        let lang = repo
+            .language
+            .as_ref()
+            .and_then(|x| x.as_str())
+            .unwrap_or_default();
         write_col!(, f, LANG_NAME_LEN, lang, )?;
 
         let attrs: RepositoryAttrs = repo.into();
@@ -226,7 +257,11 @@ impl fmt::Display for StarredRepository {
         let desc = RepositoryDescription::from_repository(repo, 60);
         write!(f, " | {}", &desc.to_string())?;
 
-        let owner = repo.owner.as_ref().map(|x| x.login.as_str()).unwrap_or_default();
+        let owner = repo
+            .owner
+            .as_ref()
+            .map(|x| x.login.as_str())
+            .unwrap_or_default();
         write_col!(, f, OWNER_NAME_LEN, owner)?;
 
         let pushed = repo
@@ -237,7 +272,11 @@ impl fmt::Display for StarredRepository {
             .unwrap_or_default();
         write_col!(, f, PUSHED_AT_LEN, &pushed)?;
 
-        let lang = repo.language.as_ref().and_then(|x| x.as_str()).unwrap_or_default();
+        let lang = repo
+            .language
+            .as_ref()
+            .and_then(|x| x.as_str())
+            .unwrap_or_default();
         write_col!(, f, LANG_NAME_LEN, lang, )?;
 
         let attrs: RepositoryAttrs = repo.into();
@@ -245,4 +284,30 @@ impl fmt::Display for StarredRepository {
 
         Ok(())
     }
+}
+
+/// Transform `snake_case` to `Statement`.
+///
+/// Assumes characters are ASCII characters.
+pub fn snake_case_to_statement(text: impl Into<String>) -> String {
+    let s = text.into();
+    let chars = s.chars().into_iter();
+    let chars = chars.enumerate().map(|(i, c)| {
+        if i == 0 {
+            c.to_ascii_uppercase()
+        } else if c == '_' {
+            ' '
+        } else {
+            c
+        }
+    });
+    chars.collect()
+}
+
+#[cfg(test)]
+#[test]
+fn test_snake_case_to_statement() {
+    let input = "hello_world";
+    let output = snake_case_to_statement(input);
+    assert_eq!("Hello world", output);
 }

@@ -1,9 +1,9 @@
 use crate::{
     create_local_repository_path, create_namespaced_workspace_path,
-    display::RelativeFromNow,
+    display::{snake_case_to_statement, RelativeFromNow},
     github_client::GitHubClientImpl,
     github_models::{GhCheckRun, GhCommit, GhRepository},
-    kceh, PartialRepositoryId, RepositoryId, StarredRepository,
+    PartialRepositoryId, RepositoryId, StarredRepository,
 };
 use anyhow::{bail, ensure, Context, Error, Result};
 use async_trait::async_trait;
@@ -292,7 +292,7 @@ where
                     stdout,
                     "{}: {} - {}",
                     c.name,
-                    kceh::snake_case_to_statement(c.conclusion.as_deref().unwrap_or(&c.status)),
+                    snake_case_to_statement(c.conclusion.as_deref().unwrap_or(&c.status)),
                     c.completed_at.unwrap_or(c.started_at).relative_from_now()
                 )?;
             }

@@ -1,7 +1,6 @@
 mod display;
 mod github_client;
 mod github_models;
-mod kceh;
 
 pub mod app;
 
