@@ -183,11 +183,6 @@ where
         Ok(())
     }
 
-    pub async fn fork_repository(&'a self, repo_id: RepositoryId) -> Result<(), Error> {
-        self.github_client.fork_repository(repo_id).await?;
-        Ok(())
-    }
-
     pub async fn clone_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
         let repo_id = repo_id.complete(self.github_username);
 

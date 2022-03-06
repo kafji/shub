@@ -45,7 +45,6 @@ async fn main() -> Result<(), Error> {
                     app.apply_repository_settings(from, to).await?
                 }
             },
-            repos::Command::Fork { repo } => app.fork_repository(repo).await?,
             repos::Command::Clone { repo } => app.clone_repository(repo).await?,
             repos::Command::Create { repo } => todo!(),
             repos::Command::Delete { repo } => app.delete_repository(repo).await?,

@@ -59,11 +59,6 @@ pub mod repos {
             #[clap(subcommand)]
             cmd: self::settings::Command,
         },
-        /// Fork repository.
-        Fork {
-            /// Repository identifier.
-            repo: RepositoryId,
-        },
         /// Clone remote repository. Only support cloning owned repository.
         Clone {
             /// Repository identifier.
