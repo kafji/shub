@@ -9,13 +9,6 @@ use crate::github_models::{GhCommit, GhRepository};
 use repository_id::FullRepositoryId;
 use std::path::{Path, PathBuf};
 
-fn create_namespaced_workspace_path(
-    workspace_root_dir: impl AsRef<Path>,
-    namespace: &str,
-) -> PathBuf {
-    workspace_root_dir.as_ref().to_path_buf().join(namespace)
-}
-
 fn create_local_repository_path(
     workspace_root_dir: impl AsRef<Path>,
     repo_id: &FullRepositoryId,

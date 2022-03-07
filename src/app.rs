@@ -1,19 +1,19 @@
 use crate::{
-    create_local_repository_path, create_namespaced_workspace_path,
+    create_local_repository_path,
     display::{BuildsInfo, CommitInfo},
     github_client::GitHubClientImpl,
     github_models::{GhCheckRun, GhCommit, GhRepository},
     repository_id::PartialRepositoryId,
     FullRepositoryId, StarredRepository,
 };
-use anyhow::{bail, ensure, Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 use async_trait::async_trait;
 use console::Term;
 use dialoguer::Confirm;
 use futures::{
     future,
-    stream::{LocalBoxStream, StreamExt, TryStreamExt},
-    FutureExt,
+    stream::{LocalBoxStream, TryStreamExt},
+    FutureExt, Stream,
 };
 use git2::{build::RepoBuilder, Cred, FetchOptions, RemoteCallbacks};
 use http::header::HeaderName;
@@ -22,7 +22,6 @@ use sekret::Secret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
-    borrow::Cow,
     collections::HashMap,
     env, fmt,
     io::Write,
@@ -31,12 +30,8 @@ use std::{
     process::Command,
     time::Duration,
 };
-use tokio::{
-    fs,
-    io::{AsyncBufReadExt, BufReader},
-    task,
-};
-use tokio_stream::wrappers::{LinesStream, ReadDirStream};
+use tokio::{fs, task};
+use tokio_stream::wrappers::ReadDirStream;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct AppConfig<'a> {
@@ -260,7 +255,7 @@ where
             write!(out, "{}", BuildsInfo::from_github_check_runs(&runs))?;
             out.flush()?;
 
-            let completed = runs.iter().all(|x| x.completed_at.is_some());
+            let completed = runs.iter().map(|x| &x.completed_at).all(Option::is_some);
             if completed {
                 break;
             }
@@ -274,53 +269,16 @@ where
     }
 
     pub async fn list_projects(&self) -> Result<(), Error> {
-        let path =
-            create_namespaced_workspace_path(self.workspace_root_dir_path, self.github_username);
-        {
-            let meta = fs::metadata(&path).await?;
-            ensure!(meta.is_dir());
+        let mut out = Term::buffered_stdout();
+
+        let projects: Vec<_> = self.get_projects().await?.try_collect().await?;
+
+        for project in projects {
+            if let Some(name) = project.file_name() {
+                writeln!(&mut out, "{}", name.to_string_lossy())?;
+            }
         }
-
-        let workspace = {
-            let dir = fs::read_dir(path).await?;
-            ReadDirStream::new(dir)
-        };
-
-        workspace
-            .map_err(Error::new)
-            .and_then(|dir| async {
-                let readme = {
-                    let path = dir.path().join("README.md");
-                    if !path.exists() {
-                        return Ok((dir, None));
-                    }
-                    let file = fs::File::open(&path).await.with_context(|| {
-                        format!("Failed to read file at `{}`.", path.to_string_lossy())
-                    })?;
-                    BufReader::new(file)
-                };
-                let lines = LinesStream::new(readme.lines());
-                let desc: Option<String> = lines
-                    .and_then(|x| future::ok(x.trim().to_owned()))
-                    .try_filter(|x| future::ready(!x.is_empty()))
-                    .skip(1)
-                    .map_ok(|x| x.chars().take(80).collect())
-                    .next()
-                    .await
-                    .transpose()?;
-                Ok((dir, desc))
-            })
-            .try_for_each(|(dir, desc)| async move {
-                let name = dir.file_name();
-                let name = name.to_string_lossy();
-                print!("{name}");
-                if let Some(desc) = desc {
-                    print!("\t\t{desc}");
-                }
-                print!("\n");
-                Ok(())
-            })
-            .await?;
+        out.flush()?;
 
         Ok(())
     }
@@ -338,11 +296,23 @@ where
         Ok(())
     }
 
+    async fn get_projects(
+        &self,
+    ) -> Result<impl Stream<Item = Result<PathBuf, std::io::Error>>, Error> {
+        Ok(
+            ReadDirStream::new(fs::read_dir(&self.my_workspace_dir_path).await?).try_filter_map(
+                |entry| {
+                    future::ok(
+                        Some(entry.path()).and_then(|x| if x.is_dir() { Some(x) } else { None }),
+                    )
+                },
+            ),
+        )
+    }
+
     async fn get_project_path(&self, project_name: &str) -> Result<PathBuf, Error> {
-        ReadDirStream::new(fs::read_dir(&self.my_workspace_dir_path).await?)
-            .try_filter_map(|entry| {
-                future::ok(Some(entry.path()).and_then(|x| if x.is_dir() { Some(x) } else { None }))
-            })
+        self.get_projects()
+            .await?
             .try_filter(|path| {
                 future::ready(
                     path.file_name()
