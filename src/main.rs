@@ -45,7 +45,7 @@ async fn main() -> Result<(), Error> {
             stars::Command::Ls => app.list_starred_repositories().await?,
         },
         Command::T { cmd } => match cmd {
-            tasks::Command::Ls => todo!(),
+            tasks::Command::Ls => app.list_my_tasks().await?,
         },
         Command::W { cmd } => match cmd {
             workspace::Command::Ls => app.list_projects().await?,

@@ -2,7 +2,10 @@ use crate::{app::GitHubClient, github_models::*, FullRepositoryId};
 use anyhow::{bail, Error};
 use async_stream::try_stream;
 use async_trait::async_trait;
-use futures::{stream::LocalBoxStream, Future, Stream, StreamExt};
+use futures::{
+    stream::{self, LocalBoxStream},
+    Future, Stream, StreamExt, TryStreamExt,
+};
 use http::header::HeaderName;
 use octocrab::{Octocrab, Page};
 use sekret::Secret;
@@ -106,20 +109,53 @@ impl<'a> GitHubClient<'a> for GitHubClientImpl {
         Ok(repo)
     }
 
-    async fn delete_repository(&'a self, repo_id: FullRepositoryId) -> Result<(), Error> {
-        let client = &self.client;
-        client.repos(repo_id.owner, repo_id.name).delete().await?;
-        Ok(())
+    fn list_user_issues(&'a self) -> LocalBoxStream<'a, Result<GhIssue, Error>> {
+        stream::try_unfold::<PageNum, _, _, Page<GhIssue>>(
+            PageNum::Init,
+            move |page_num| async move {
+                let path: Option<Cow<str>> = match page_num {
+                    PageNum::Init => Some("issues".into()),
+                    PageNum::Num(x) => Some(format!("issues?per_page=100&page={x}").into()),
+                    PageNum::End => None,
+                };
+                match path {
+                    Some(path) => {
+                        let page: Page<GhIssue> = self.client.get::<_, _, ()>(path, None).await?;
+                        let next_page_num = page
+                            .next
+                            .as_ref()
+                            .map(|_| page_num.succ())
+                            .unwrap_or(PageNum::End);
+                        Ok(Some((page, next_page_num)))
+                    }
+                    None => Result::<_, Error>::Ok(None),
+                }
+            },
+        )
+        .map_ok(|x: Page<GhIssue>| {
+            let x: Vec<_> = x.into_iter().collect();
+            stream::iter(x).map(Ok)
+        })
+        .try_flatten()
+        .boxed_local()
     }
+}
 
-    async fn fork_repository(&'a self, repo_id: FullRepositoryId) -> Result<(), Error> {
-        let client = &self.client;
-        client
-            .repos(repo_id.owner, repo_id.name)
-            .create_fork()
-            .send()
-            .await?;
-        Ok(())
+#[derive(PartialEq, Copy, Clone, Debug)]
+enum PageNum {
+    Init,
+    Num(u8),
+    End,
+}
+
+impl PageNum {
+    fn succ(self) -> PageNum {
+        let num = match self {
+            PageNum::Init => 1,
+            PageNum::Num(x) => x + 1,
+            PageNum::End => panic!(),
+        };
+        PageNum::Num(num)
     }
 }
 

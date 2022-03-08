@@ -51,3 +51,17 @@ pub struct GhCheckRunOutput {
     pub summary: Option<String>,
     pub text: Option<String>,
 }
+
+#[derive(Deserialize, PartialEq, Clone, Debug)]
+pub struct GhIssue {
+    #[serde(flatten)]
+    pub inner: octocrab::models::issues::Issue,
+
+    pub repository: GhIssueRepository,
+}
+
+#[derive(Deserialize, PartialEq, Clone, Debug)]
+pub struct GhIssueRepository {
+    pub name: String,
+    pub full_name: String,
+}

@@ -1,11 +1,15 @@
-use crate::{
-    github_models::{GhCheckRun, GhCommit},
-    OwnedRepository, StarredRepository,
-};
+use crate::{github_models::*, OwnedRepository, StarredRepository};
+use anyhow::anyhow;
 use bstr::BStr;
 use chrono::{DateTime, TimeZone, Utc};
 use octocrab::models::Repository;
-use std::{borrow::Cow, fmt};
+use std::{
+    borrow::Cow,
+    fmt::{self, Display, Formatter},
+    io::Write,
+    str::FromStr,
+};
+use tabwriter::TabWriter;
 use unicode_segmentation::UnicodeSegmentation;
 
 macro_rules! write_col {
@@ -104,8 +108,8 @@ where
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub struct Since(chrono::Duration);
 
-impl fmt::Display for Since {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Since {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let days = self.0.num_days();
         match days {
             _ if days < 1 => {
@@ -151,8 +155,8 @@ impl<'a> From<&'a Repository> for RepositoryName<'a> {
     }
 }
 
-impl fmt::Display for RepositoryName<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for RepositoryName<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write_col!(f, 15, self.0)?;
         Ok(())
     }
@@ -182,8 +186,8 @@ impl From<&Repository> for RepositoryAttrs {
     }
 }
 
-impl fmt::Display for RepositoryAttrs {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for RepositoryAttrs {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write_col!(f, 15, &self.0)?;
         Ok(())
     }
@@ -199,15 +203,15 @@ impl<'a> RepositoryDescription<'a> {
     }
 }
 
-impl fmt::Display for RepositoryDescription<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for RepositoryDescription<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write_col!(f, self.1, self.0)?;
         Ok(())
     }
 }
 
-impl fmt::Display for OwnedRepository {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for OwnedRepository {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let repo = &self.0;
         let commit = &self.1;
 
@@ -252,8 +256,8 @@ impl fmt::Display for OwnedRepository {
     }
 }
 
-impl fmt::Display for StarredRepository {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for StarredRepository {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let repo = &self.0;
 
         let name: RepositoryName = repo.into();
@@ -340,8 +344,8 @@ impl<'a> CommitInfo<'a> {
     }
 }
 
-impl fmt::Display for CommitInfo<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for CommitInfo<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if let Some(author_name) = self.author_name {
             write!(f, "{author_name}")?;
             if let Some(author_email) = self.author_email {
@@ -377,8 +381,8 @@ impl<'a> BuildsInfo<'a> {
     }
 }
 
-impl fmt::Display for BuildsInfo<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for BuildsInfo<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for build in &self.builds {
             writeln!(f, "{}", build)?;
         }
@@ -406,8 +410,8 @@ impl<'a> BuildInfo<'a> {
     }
 }
 
-impl fmt::Display for BuildInfo<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for BuildInfo<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}: {} - {}",
@@ -415,5 +419,105 @@ impl fmt::Display for BuildInfo<'_> {
             snake_case_to_statement(self.status),
             self.timestamp.since()
         )
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct TaskInfos<'a> {
+    infos: Vec<TaskInfo<'a>>,
+}
+
+impl<'a> TaskInfos<'a> {
+    pub fn from_github_issues(issues: &'a [GhIssue]) -> Self {
+        let infos = issues.iter().map(TaskInfo::from_github_issue).collect();
+        Self { infos }
+    }
+}
+
+impl Display for TaskInfos<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut w = TabWriter::new(Vec::new());
+        for i in &self.infos {
+            w.write_all(
+                format!(
+                    "{}\t{}\t{}\t{}\n",
+                    i.repository, i.title, i.state, i.task_type
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        }
+        write!(f, "{}", String::from_utf8(w.into_inner().unwrap()).unwrap())
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+struct TaskInfo<'a> {
+    title: &'a str,
+    state: TaskState,
+    repository: &'a str,
+    task_type: TaskType,
+}
+
+impl<'a> TaskInfo<'a> {
+    fn from_github_issue(issue: &'a GhIssue) -> Self {
+        let title = &issue.inner.title;
+        let state = issue.inner.state.parse().unwrap();
+        let repository = &issue.repository.full_name;
+        let task_type = issue
+            .inner
+            .pull_request
+            .as_ref()
+            .map(|_| TaskType::PullRequest)
+            .unwrap_or(TaskType::Issue);
+        Self {
+            title,
+            state,
+            repository,
+            task_type,
+        }
+    }
+}
+
+#[derive(PartialEq, Copy, Clone, Debug)]
+enum TaskState {
+    Open,
+}
+
+impl FromStr for TaskState {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use TaskState::*;
+        match s {
+            "open" => Ok(Open),
+            _ => Err(anyhow!("unexpected task state, was `{s}`")),
+        }
+    }
+}
+
+impl Display for TaskState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let x = match self {
+            TaskState::Open => "Open",
+        };
+        write!(f, "{}", x)
+    }
+}
+
+#[derive(PartialEq, Copy, Clone, Debug)]
+enum TaskType {
+    Issue,
+    PullRequest,
+}
+
+impl Display for TaskType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use TaskType::*;
+        let x = match self {
+            Issue => "Issue",
+            PullRequest => "Pull request",
+        };
+        write!(f, "{}", x)
     }
 }

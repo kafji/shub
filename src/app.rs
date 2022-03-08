@@ -1,12 +1,8 @@
 use crate::{
-    create_local_repository_path,
-    display::{BuildsInfo, CommitInfo},
-    github_client::GitHubClientImpl,
-    github_models::{GhCheckRun, GhCommit, GhRepository},
-    repository_id::PartialRepositoryId,
-    FullRepositoryId, StarredRepository,
+    create_local_repository_path, display::*, github_client::GitHubClientImpl, github_models::*,
+    repository_id::PartialRepositoryId, FullRepositoryId, StarredRepository,
 };
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{bail, Context, Error};
 use async_trait::async_trait;
 use console::Term;
 use dialoguer::Confirm;
@@ -325,6 +321,17 @@ where
             .await?
             .ok_or_else(|| Error::msg(format!("project `{project_name}` does not exists")))
     }
+
+    pub async fn list_my_tasks(&'a self) -> Result<(), Error> {
+        let mut out = Term::buffered_stdout();
+
+        let issues: Vec<_> = self.github_client.list_user_issues().try_collect().await?;
+
+        write!(out, "{}", TaskInfos::from_github_issues(&issues))?;
+        out.flush()?;
+
+        Ok(())
+    }
 }
 
 fn create_fetch_options<'a>() -> FetchOptions<'a> {
@@ -481,7 +488,6 @@ pub trait GitHubClient<'a> {
 
     async fn get_repository(&'a self, repo_id: FullRepositoryId) -> Result<GhRepository, Error>;
 
-    async fn delete_repository(&'a self, repo_id: FullRepositoryId) -> Result<(), Error>;
-
-    async fn fork_repository(&'a self, repo_id: FullRepositoryId) -> Result<(), Error>;
+    /// https://docs.github.com/en/rest/reference/issues#list-user-account-issues-assigned-to-the-authenticated-user
+    fn list_user_issues(&'a self) -> LocalBoxStream<'a, Result<GhIssue, Error>>;
 }
