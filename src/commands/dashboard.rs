@@ -6,7 +6,7 @@ use crate::{
 use anyhow::Error;
 use futures::{future, Stream, TryStreamExt};
 use octocrab::models::Repository as GhRepository;
-use std::{cmp::max, fmt};
+use std::{borrow::Cow, cmp::max, fmt};
 
 fn get_repositories<'a>(
     gh_client: &'a GithubClient2,
@@ -80,19 +80,23 @@ async fn get_build_status(
 
 struct RepositoryDisplay {
     name: String,
-    build_status: BuildStatus,
+    build_status: Option<BuildStatus>,
 }
 
 impl fmt::Display for RepositoryDisplay {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}\t{}", self.name, self.build_status)
+        let build_status = self
+            .build_status
+            .map(|x| x.to_string().into())
+            .unwrap_or_else(|| Cow::Borrowed("None"));
+        write!(f, "{}\t{}", self.name, build_status)
     }
 }
 
 impl From<(GhRepository, Option<BuildStatus>)> for RepositoryDisplay {
     fn from((repo, status): (GhRepository, Option<BuildStatus>)) -> Self {
         let name = repo.name;
-        let build_status = status.unwrap_or(BuildStatus::Failure);
+        let build_status = status;
         Self { name, build_status }
     }
 }
