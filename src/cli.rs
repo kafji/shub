@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use shub::repository_id::PartialRepositoryId;
+use crate::repo_id::PartialRepoId;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -10,6 +10,13 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Print dashboard.
+    D {
+        /// Watch repository build statuses.
+        #[clap(long, short('w'))]
+        watch: bool,
+    },
+
     /// Repository related operations.
     R {
         #[clap(subcommand)]
@@ -43,34 +50,34 @@ pub mod repos {
         /// Browse upstream repository of a fork.
         BrowseUpstream {
             /// Repository identifier.
-            repo: Option<PartialRepositoryId>,
+            repo: Option<PartialRepoId>,
         },
 
         /// Clone remote repository.
         Clone {
             /// Repository identifier.
-            repo: PartialRepositoryId,
+            repo: PartialRepoId,
         },
 
         /// Poll build status of a repoistory.
         BuildStatus {
             /// Repository identifier.
-            repo: Option<PartialRepositoryId>,
+            repo: Option<PartialRepoId>,
         },
 
         /// Print repository settings.
         ViewSettings {
             /// Repository identifier.
-            repo: PartialRepositoryId,
+            repo: PartialRepoId,
         },
 
         /// Copy repository settings from another repository.
         CopySettings {
             /// Repository to copy the settings from.
-            from: PartialRepositoryId,
+            from: PartialRepoId,
 
             /// Repository to apply the settings to.
-            to: PartialRepositoryId,
+            to: PartialRepoId,
         },
     }
 }

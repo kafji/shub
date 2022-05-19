@@ -1,17 +1,24 @@
+mod app;
+mod app2;
+mod app_env;
+mod cli;
+mod commands;
 mod display;
 mod github_client;
+mod github_client2;
 mod github_models;
+mod repo_id;
 
-pub mod app;
-pub mod repository_id;
+/// Run application;
+pub use crate::app2::start as start_app;
 
 use crate::github_models::{GhCommit, GhRepository};
-use repository_id::FullRepositoryId;
+use repo_id::FullRepoId;
 use std::path::{Path, PathBuf};
 
 fn create_local_repository_path(
     workspace_root_dir: impl AsRef<Path>,
-    repo_id: &FullRepositoryId,
+    repo_id: &FullRepoId,
 ) -> PathBuf {
     workspace_root_dir
         .as_ref()
@@ -24,7 +31,7 @@ fn create_local_repository_path(
 #[test]
 fn test_local_repository_path() {
     let workspace = "./workspace";
-    let path = create_local_repository_path(workspace, &FullRepositoryId::new("kafji", "shub"));
+    let path = create_local_repository_path(workspace, &FullRepoId::new("kafji", "shub"));
     assert_eq!(path.display().to_string(), "./workspace/kafji/shub");
 }
 

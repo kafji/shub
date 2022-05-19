@@ -1,7 +1,18 @@
+use crate::repo_id::PartialRepoId2;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 pub use octocrab::models::Repository as GhRepository;
+
+impl PartialRepoId2 for GhRepository {
+    fn owner(&self) -> Option<&str> {
+        self.owner.as_ref().map(|x| x.login.as_str())
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
 
 #[derive(Deserialize, PartialEq, Clone, Debug)]
 pub struct GhCommit {

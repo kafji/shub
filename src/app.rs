@@ -1,6 +1,6 @@
 use crate::{
     create_local_repository_path, display::*, github_client::GitHubClientImpl, github_models::*,
-    repository_id::PartialRepositoryId, FullRepositoryId, StarredRepository,
+    repo_id::PartialRepoId, FullRepoId, StarredRepository,
 };
 use anyhow::{bail, Context, Error};
 use async_trait::async_trait;
@@ -40,7 +40,7 @@ pub struct AppConfig<'a> {
 pub struct App<'a, GitHubClient> {
     github_username: &'a str,
     workspace_root_dir_path: &'a Path,
-    github_client: GitHubClient,
+    pub github_client: GitHubClient,
     my_workspace_dir_path: PathBuf,
 }
 
@@ -71,7 +71,7 @@ where
 {
     pub async fn view_repository_settings(
         &'a self,
-        repo_id: PartialRepositoryId,
+        repo_id: PartialRepoId,
     ) -> Result<(), Error> {
         let repo_id = repo_id.complete(self.github_username);
         let repo = self.github_client.get_repository(repo_id).await?;
@@ -82,17 +82,17 @@ where
 
     pub async fn copy_repository_settings(
         &self,
-        from: PartialRepositoryId,
-        to: PartialRepositoryId,
+        from: PartialRepoId,
+        to: PartialRepoId,
     ) -> Result<(), Error> {
         let from = from.complete(self.github_username);
         let to = to.complete(self.github_username);
 
         let client = create_client()?;
 
-        let get_settings = |repo_id: FullRepositoryId| {
+        let get_settings = |repo_id: FullRepoId| {
             let client = client.clone();
-            let FullRepositoryId { owner, name } = repo_id;
+            let FullRepoId { owner, name } = repo_id;
             async move {
                 let repo = client.repos(owner, name).get().await?;
                 let settings = repo.extract_repository_settings()?;
@@ -117,7 +117,7 @@ where
         }
 
         let _: HashMap<String, Value> = {
-            let FullRepositoryId { owner, name } = to;
+            let FullRepoId { owner, name } = to;
             client
                 .patch(format!("repos/{owner}/{name}"), Some(&new_settings))
                 .await?
@@ -140,7 +140,7 @@ where
 
     pub async fn browse_upstream_repository(
         &'a self,
-        repo_id: Option<PartialRepositoryId>,
+        repo_id: Option<PartialRepoId>,
     ) -> Result<(), Error> {
         let repo_id = match repo_id {
             Some(repo_id) => repo_id.complete(self.github_username),
@@ -163,7 +163,7 @@ where
         Ok(())
     }
 
-    pub async fn clone_repository(&'a self, repo_id: PartialRepositoryId) -> Result<(), Error> {
+    pub async fn clone_repository(&'a self, repo_id: PartialRepoId) -> Result<(), Error> {
         let repo_id = repo_id.complete(self.github_username);
 
         let repo_info = self.github_client.get_repository(repo_id.clone()).await?;
@@ -216,7 +216,7 @@ where
 
     pub async fn poll_repository_build_status(
         &'a self,
-        repo_id: Option<PartialRepositoryId>,
+        repo_id: Option<PartialRepoId>,
     ) -> Result<(), Error> {
         let mut out = Term::buffered_stdout();
 
@@ -437,7 +437,7 @@ impl fmt::Display for RepositorySettingsDiff<'_> {
     }
 }
 
-async fn get_repo_id_for_cwd() -> Result<FullRepositoryId, Error> {
+async fn get_repo_id_for_cwd() -> Result<FullRepoId, Error> {
     task::block_in_place(|| {
         let repo = git2::Repository::discover(".")?;
         let origin = repo.find_remote("origin")?;
@@ -472,7 +472,7 @@ pub trait GitHubClient<'a> {
     /// https://docs.github.com/en/rest/reference/commits#list-commits
     fn list_repository_commits<'b>(
         &'a self,
-        repo_id: &'b FullRepositoryId,
+        repo_id: &'b FullRepoId,
     ) -> LocalBoxStream<'b, Result<GhCommit, Error>>
     where
         'a: 'b;
@@ -480,13 +480,13 @@ pub trait GitHubClient<'a> {
     /// https://docs.github.com/en/rest/reference/checks#list-check-runs-for-a-git-reference
     async fn get_check_runs_for_gitref<'b>(
         &'a self,
-        repo_id: &'b FullRepositoryId,
+        repo_id: &'b FullRepoId,
         gitref: &'b str,
     ) -> Result<Vec<GhCheckRun>, Error>
     where
         'a: 'b;
 
-    async fn get_repository(&'a self, repo_id: FullRepositoryId) -> Result<GhRepository, Error>;
+    async fn get_repository(&'a self, repo_id: FullRepoId) -> Result<GhRepository, Error>;
 
     /// https://docs.github.com/en/rest/reference/issues#list-user-account-issues-assigned-to-the-authenticated-user
     fn list_user_issues(&'a self) -> LocalBoxStream<'a, Result<GhIssue, Error>>;

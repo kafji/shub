@@ -3,26 +3,28 @@ use anyhow::{bail, Error};
 use core::fmt;
 use std::str::FromStr;
 
-pub trait GetRepositoryId {
-    fn get_repository_id(&self) -> Result<FullRepositoryId, Error>;
+#[deprecated]
+pub trait GetRepoId {
+    fn get_repo_id(&self) -> Result<FullRepoId, Error>;
 }
 
-impl GetRepositoryId for GhRepository {
-    fn get_repository_id(&self) -> Result<FullRepositoryId, Error> {
+impl GetRepoId for GhRepository {
+    fn get_repo_id(&self) -> Result<FullRepoId, Error> {
         let owner = self.owner.as_ref().unwrap().login.clone();
         let name = self.name.clone();
-        let id = FullRepositoryId::new(owner, name);
+        let id = FullRepoId::new(owner, name);
         Ok(id)
     }
 }
 
+#[deprecated]
 #[derive(PartialEq, Clone, Debug)]
-pub struct FullRepositoryId {
+pub struct FullRepoId {
     pub owner: String,
     pub name: String,
 }
 
-impl FullRepositoryId {
+impl FullRepoId {
     pub fn new(owner: impl Into<String>, name: impl Into<String>) -> Self {
         let owner = owner.into();
         let name = name.into();
@@ -30,7 +32,7 @@ impl FullRepositoryId {
     }
 
     pub fn from_partial(
-        PartialRepositoryId { owner, name }: PartialRepositoryId,
+        PartialRepoId { owner, name }: PartialRepoId,
         default_owner: String,
     ) -> Self {
         Self {
@@ -38,15 +40,23 @@ impl FullRepositoryId {
             name,
         }
     }
+
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
-impl fmt::Display for FullRepositoryId {
+impl fmt::Display for FullRepoId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.owner, self.name)
     }
 }
 
-impl FromStr for FullRepositoryId {
+impl FromStr for FullRepoId {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -72,10 +82,7 @@ impl FromStr for FullRepositoryId {
 #[cfg(test)]
 #[test]
 fn test_repository_id_display() {
-    assert_eq!(
-        FullRepositoryId::new("kafji", "shub").to_string(),
-        "kafji/shub"
-    );
+    assert_eq!(FullRepoId::new("kafji", "shub").to_string(), "kafji/shub");
 }
 
 #[cfg(test)]
@@ -83,7 +90,7 @@ fn test_repository_id_display() {
 fn test_parse_repository_id() {
     // trivial case
     assert_eq!(
-        FullRepositoryId {
+        FullRepoId {
             owner: "kafji".to_owned().into(),
             name: "shub".to_owned()
         },
@@ -92,19 +99,16 @@ fn test_parse_repository_id() {
     // missing owner
     assert_eq!(
         "Expecting in `:owner/:name` format, but was `shub`.",
-        "shub".parse::<FullRepositoryId>().unwrap_err().to_string()
+        "shub".parse::<FullRepoId>().unwrap_err().to_string()
     );
     // missing name
     assert_eq!(
         "Expecting in `:owner/:name` format, but was `kafji/`.",
-        "kafji/"
-            .parse::<FullRepositoryId>()
-            .unwrap_err()
-            .to_string()
+        "kafji/".parse::<FullRepoId>().unwrap_err().to_string()
     );
     // double separator
     assert_eq!(
-        FullRepositoryId {
+        FullRepoId {
             owner: "kafji".to_owned().into(),
             name: "sh/ub".to_owned()
         },
@@ -112,19 +116,20 @@ fn test_parse_repository_id() {
     );
 }
 
+#[deprecated]
 #[derive(PartialEq, Clone, Debug)]
-pub struct PartialRepositoryId {
+pub struct PartialRepoId {
     pub owner: Option<String>,
     pub name: String,
 }
 
-impl PartialRepositoryId {
-    pub fn complete(self, default_owner: impl Into<String>) -> FullRepositoryId {
-        FullRepositoryId::from_partial(self, default_owner.into())
+impl PartialRepoId {
+    pub fn complete(self, default_owner: impl Into<String>) -> FullRepoId {
+        FullRepoId::from_partial(self, default_owner.into())
     }
 }
 
-impl FromStr for PartialRepositoryId {
+impl FromStr for PartialRepoId {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -153,7 +158,7 @@ impl FromStr for PartialRepositoryId {
 fn test_parse_partial_repository_id() {
     // trivial case
     assert_eq!(
-        PartialRepositoryId {
+        PartialRepoId {
             owner: "kafji".to_owned().into(),
             name: "shub".to_owned()
         },
@@ -161,7 +166,7 @@ fn test_parse_partial_repository_id() {
     );
     // missing owner
     assert_eq!(
-        PartialRepositoryId {
+        PartialRepoId {
             owner: None,
             name: "shub".to_owned()
         },
@@ -170,17 +175,60 @@ fn test_parse_partial_repository_id() {
     // missing name
     assert_eq!(
         "Expecting in `:owner?/:name` format, but was `kafji/`.",
-        "kafji/"
-            .parse::<PartialRepositoryId>()
-            .unwrap_err()
-            .to_string()
+        "kafji/".parse::<PartialRepoId>().unwrap_err().to_string()
     );
     // double separator
     assert_eq!(
-        PartialRepositoryId {
+        PartialRepoId {
             owner: "kafji".to_owned().into(),
             name: "sh/ub".to_owned()
         },
         "kafji/sh/ub".parse().unwrap()
     );
+}
+
+pub trait RepoId {
+    fn owner(&self) -> &str;
+    fn name(&self) -> &str;
+}
+
+pub trait PartialRepoId2 {
+    fn owner(&self) -> Option<&str>;
+
+    fn name(&self) -> &str;
+
+    fn into_full<'a>(&'a self, default_owner: &'a str) -> RepositoryId2 {
+        let owner = self.owner().unwrap_or(default_owner);
+        let name = self.name();
+        RepositoryId2 { owner, name }
+    }
+}
+
+impl<T> PartialRepoId2 for T
+where
+    T: RepoId,
+{
+    fn owner(&self) -> Option<&str> {
+        Some(RepoId::owner(self))
+    }
+
+    fn name(&self) -> &str {
+        RepoId::name(self)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct RepositoryId2<'a> {
+    owner: &'a str,
+    name: &'a str,
+}
+
+impl RepoId for RepositoryId2<'_> {
+    fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
 }
