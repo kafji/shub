@@ -43,7 +43,13 @@ pub async fn start() -> Result<(), Error> {
                 app.copy_repository_settings(from, to).await?
             }
         },
-        Command::D { watch } => crate::commands::dashboard::print_dashboard(app_env).await?,
+        Command::D { update, watch } => {
+            if update {
+                crate::commands::dashboard::update_dashboard(app_env).await?
+            } else {
+                crate::commands::dashboard::print_dashboard(app_env).await?
+            }
+        }
         Command::S { cmd } => match cmd {
             stars::Command::Ls => app.list_starred_repositories().await?,
         },

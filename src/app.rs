@@ -1,6 +1,6 @@
 use crate::{
     create_local_repository_path, display::*, github_client::GitHubClientImpl, github_models::*,
-    repo_id::PartialRepoId, FullRepoId, StarredRepository,
+    repository_id::PartialRepoId, FullRepoId, StarredRepository,
 };
 use anyhow::{bail, Context, Error};
 use async_trait::async_trait;

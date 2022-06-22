@@ -1,5 +1,5 @@
+use crate::repository_id::PartialRepoId;
 use clap::{Parser, Subcommand};
-use crate::repo_id::PartialRepoId;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -12,6 +12,10 @@ pub struct Cli {
 pub enum Command {
     /// Print dashboard.
     D {
+        /// Update dashboard before printing it.
+        #[clap(long)]
+        update: bool,
+
         /// Watch repository build statuses.
         #[clap(long, short('w'))]
         watch: bool,

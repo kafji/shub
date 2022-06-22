@@ -1,6 +1,8 @@
+use std::fmt;
+
 use crate::{
     github_models::{GhCheckRun, GhCommit, GhRepository},
-    repo_id::RepoId,
+    repository_id::IsRepositoryId,
 };
 use anyhow::Error;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
@@ -91,7 +93,7 @@ impl GithubClient2 {
     /// Gets the latest commit of a repository.
     pub async fn get_latest_commit(
         &self,
-        repo_id: &impl RepoId,
+        repo_id: &impl IsRepositoryId,
     ) -> Result<Option<GhCommit>, Error> {
         let owner = repo_id.owner();
         let name = repo_id.name();
@@ -103,18 +105,24 @@ impl GithubClient2 {
         Ok(commit)
     }
 
+    /// https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference
+    #[tracing::instrument(skip(self))]
     pub async fn get_check_runs_for_gitref(
         &self,
-        repo_id: &impl RepoId,
+        repo_id: &(impl IsRepositoryId + fmt::Debug),
         gitref: &str,
     ) -> Result<Vec<GhCheckRun>, Error> {
-        let owner = repo_id.owner();
-        let name = repo_id.name();
-        let path = format!("repos/{owner}/{name}/commits/{gitref}/check-runs?per_page=100");
+        let path = {
+            let owner = repo_id.owner();
+            let name = repo_id.name();
+            format!("repos/{owner}/{name}/commits/{gitref}/check-runs")
+        };
+
         #[derive(Deserialize)]
         struct Envelope {
             check_runs: Vec<GhCheckRun>,
         }
+
         let response: Envelope = self.0.get::<_, _, ()>(path, None).await?;
         Ok(response.check_runs)
     }

@@ -1,21 +1,8 @@
-use crate::github_models::GhRepository;
+// todo(kfj): move to crate::types::self
+
 use anyhow::{bail, Error};
 use core::fmt;
 use std::str::FromStr;
-
-#[deprecated]
-pub trait GetRepoId {
-    fn get_repo_id(&self) -> Result<FullRepoId, Error>;
-}
-
-impl GetRepoId for GhRepository {
-    fn get_repo_id(&self) -> Result<FullRepoId, Error> {
-        let owner = self.owner.as_ref().unwrap().login.clone();
-        let name = self.name.clone();
-        let id = FullRepoId::new(owner, name);
-        Ok(id)
-    }
-}
 
 #[deprecated]
 #[derive(PartialEq, Clone, Debug)]
@@ -25,12 +12,6 @@ pub struct FullRepoId {
 }
 
 impl FullRepoId {
-    pub fn new(owner: impl Into<String>, name: impl Into<String>) -> Self {
-        let owner = owner.into();
-        let name = name.into();
-        Self { owner, name }
-    }
-
     pub fn from_partial(
         PartialRepoId { owner, name }: PartialRepoId,
         default_owner: String,
@@ -39,14 +20,6 @@ impl FullRepoId {
             owner: owner.unwrap_or(default_owner),
             name,
         }
-    }
-
-    pub fn owner(&self) -> &str {
-        &self.owner
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
     }
 }
 
@@ -77,12 +50,6 @@ impl FromStr for FullRepoId {
         };
         Ok(r)
     }
-}
-
-#[cfg(test)]
-#[test]
-fn test_repository_id_display() {
-    assert_eq!(FullRepoId::new("kafji", "shub").to_string(), "kafji/shub");
 }
 
 #[cfg(test)]
@@ -187,43 +154,29 @@ fn test_parse_partial_repository_id() {
     );
 }
 
-pub trait RepoId {
-    fn owner(&self) -> &str;
-    fn name(&self) -> &str;
-}
-
-pub trait PartialRepoId2 {
-    fn owner(&self) -> Option<&str>;
-
-    fn name(&self) -> &str;
-
-    fn into_full<'a>(&'a self, default_owner: &'a str) -> RepositoryId2 {
-        let owner = self.owner().unwrap_or(default_owner);
-        let name = self.name();
-        RepositoryId2 { owner, name }
-    }
-}
-
-impl<T> PartialRepoId2 for T
-where
-    T: RepoId,
-{
-    fn owner(&self) -> Option<&str> {
-        Some(RepoId::owner(self))
-    }
-
-    fn name(&self) -> &str {
-        RepoId::name(self)
-    }
-}
+// types ------------------------------
 
 #[derive(Debug, PartialEq)]
-pub struct RepositoryId2<'a> {
+pub struct RepositoryId<'a> {
     owner: &'a str,
     name: &'a str,
 }
 
-impl RepoId for RepositoryId2<'_> {
+pub trait IsRepositoryId {
+    fn owner(&self) -> &str;
+    fn name(&self) -> &str;
+}
+
+pub trait IsPartialRepositoryId {
+    fn owner(&self) -> Option<&str>;
+    fn name(&self) -> &str;
+}
+
+// end: types ------------------------------
+
+// impls ------------------------------
+
+impl IsRepositoryId for RepositoryId<'_> {
     fn owner(&self) -> &str {
         &self.owner
     }
@@ -232,3 +185,15 @@ impl RepoId for RepositoryId2<'_> {
         &self.name
     }
 }
+
+impl<T: IsRepositoryId> IsPartialRepositoryId for T {
+    fn owner(&self) -> Option<&str> {
+        Some(IsRepositoryId::owner(self))
+    }
+
+    fn name(&self) -> &str {
+        IsRepositoryId::name(self)
+    }
+}
+
+// end: impls ------------------------------
